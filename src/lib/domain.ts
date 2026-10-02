@@ -5,8 +5,9 @@ export type Habit = {
   goal_value: number | null; unit: string | null; schedule_type: ScheduleType;
   schedule_config: { weekdays?: number[]; target?: number; interval?: number };
   start_date: string; end_date: string | null; color: string | null; icon: string | null;
-  position: number; is_archived: boolean; archived_at: string | null;
+  position: number; is_archived: boolean; archived_at: string | null; archived_date?: string | null;
 };
+export type ScheduleVersion = Pick<Habit, "type" | "tracking_type" | "goal_value" | "unit" | "schedule_type" | "schedule_config" | "start_date" | "end_date" | "is_archived"> & { habit_id: string; effective_date: string };
 export type HabitLog = { id: string; habit_id: string; user_id: string; date: string; status: "COMPLETED" | "FAILED" | "SKIPPED"; value: number | null };
 export type Area = { id: string; user_id: string; name: string; color: string | null; icon: string | null; position: number };
 
@@ -27,7 +28,14 @@ export function isHabitScheduledForDate(habit: Habit, date: string) {
     case "INTERVAL": return (dayNumber(date) - dayNumber(habit.start_date)) % (habit.schedule_config.interval ?? 1) === 0;
   }
 }
-export function getScheduledHabits(habits: Habit[], date: string) { return habits.filter(h => isHabitScheduledForDate(h, date)); }
+export function habitOnDate(habit: Habit, versions: ScheduleVersion[], date: string): Habit {
+  const all = versions.filter(v => v.habit_id === habit.id);
+  const history = all.filter(v => v.effective_date <= date).sort((a,b) => b.effective_date.localeCompare(a.effective_date));
+  const version = history[0];
+  if (!version && all.length) return { ...habit, is_archived: true };
+  return version ? { ...habit, type: version.type, tracking_type: version.tracking_type, goal_value: version.goal_value, unit: version.unit, schedule_type: version.schedule_type, schedule_config: version.schedule_config, start_date: version.start_date, end_date: version.end_date, is_archived: version.is_archived } : habit;
+}
+export function getScheduledHabits(habits: Habit[], date: string, versions: ScheduleVersion[] = []) { return habits.map(h => habitOnDate(h, versions, date)).filter(h => isHabitScheduledForDate(h, date)); }
 export function logAchievesGoal(habit: Habit, log?: HabitLog) {
   if (!log || log.status !== "COMPLETED") return false;
   return habit.tracking_type === "BOOLEAN" || Number(log.value ?? 0) >= Number(habit.goal_value ?? 0);
@@ -36,7 +44,7 @@ export function periodKey(date: string, type: ScheduleType) { return type === "W
 function periodEnd(key: string, type: ScheduleType) {
   return type === "WEEKLY_TARGET" ? shiftDate(key, 6) : shiftDate(`${key.slice(0, 7)}-${String(new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)), 0)).getUTCDate()).padStart(2, "0")}`, 0);
 }
-export function calculateStreaks(habit: Habit, logs: HabitLog[], today: string) {
+export function calculateStreaks(habit: Habit, logs: HabitLog[], today: string, versions: ScheduleVersion[] = []) {
   const byDate = new Map(logs.map(log => [log.date, log]));
   if (habit.schedule_type === "WEEKLY_TARGET" || habit.schedule_type === "MONTHLY_TARGET") {
     const type = habit.schedule_type;
@@ -58,7 +66,7 @@ export function calculateStreaks(habit: Habit, logs: HabitLog[], today: string) 
     let best = 0, run = 0;
     for (const yes of achieved) { run = yes ? run + 1 : 0; best = Math.max(best, run); }
     let index = keys.length - 1;
-    if (index >= 0 && !achieved[index] && today < periodEnd(keys[index], type)) index--;
+    if (index >= 0 && !achieved[index] && today <= periodEnd(keys[index], type)) index--;
     let current = 0;
     for (; index >= 0 && achieved[index]; index--) current++;
     return { current, best };
@@ -67,7 +75,7 @@ export function calculateStreaks(habit: Habit, logs: HabitLog[], today: string) 
   const scheduled: string[] = [];
   for (let day = dayNumber(habit.start_date); day <= dayNumber(today); day++) {
     const date = dateFromDay(day);
-    if (isHabitScheduledForDate(habit, date)) scheduled.push(date);
+    if (isHabitScheduledForDate(habitOnDate(habit, versions, date), date)) scheduled.push(date);
   }
   for (const date of scheduled) {
     const log = byDate.get(date);
@@ -87,15 +95,21 @@ export function calculateStreaks(habit: Habit, logs: HabitLog[], today: string) 
   }
   return { current, best };
 }
-export function calculateHabitStatistics(habit: Habit, logs: HabitLog[], from: string, to: string) {
+export function calculateHabitStatistics(habit: Habit, logs: HabitLog[], from: string, to: string, versions: ScheduleVersion[] = []) {
   const relevant = logs.filter(log => log.date >= from && log.date <= to);
-  let opportunities = 0;
-  for (let day = dayNumber(from); day <= dayNumber(to); day++) if (isHabitScheduledForDate(habit, dateFromDay(day))) opportunities++;
-  const completed = relevant.filter(log => logAchievesGoal(habit, log)).length;
+  const scheduledDates: string[] = [];
+  for (let day = dayNumber(from); day <= dayNumber(to); day++) { const date = dateFromDay(day); if (isHabitScheduledForDate(habitOnDate(habit, versions, date), date)) scheduledDates.push(date); }
+  const completed = relevant.filter(log => logAchievesGoal(habitOnDate(habit, versions, log.date), log)).length;
   const failed = relevant.filter(log => log.status === "FAILED").length;
   const skipped = relevant.filter(log => log.status === "SKIPPED").length;
   const values = relevant.filter(log => log.status === "COMPLETED").map(log => Number(log.value ?? 0));
-  return { opportunities, completed, failed, skipped, completionRate: opportunities ? completed / opportunities : 0,
+  let opportunities = scheduledDates.length, successfulOpportunities = completed;
+  if (habit.schedule_type === "WEEKLY_TARGET" || habit.schedule_type === "MONTHLY_TARGET") {
+    const keys = new Set(scheduledDates.map(date => periodKey(date, habit.schedule_type)));
+    opportunities = keys.size;
+    successfulOpportunities = [...keys].filter(key => relevant.filter(log => periodKey(log.date, habit.schedule_type) === key && logAchievesGoal(habitOnDate(habit, versions, log.date), log)).length >= (habit.schedule_config.target ?? 1)).length;
+  }
+  return { opportunities, successfulOpportunities, completed, failed, skipped, completionRate: opportunities ? successfulOpportunities / opportunities : 0,
     totalValue: values.reduce((sum, v) => sum + v, 0), averageValue: values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0,
-    goalAchievementRate: opportunities ? completed / opportunities : 0 };
+    goalAchievementRate: opportunities ? successfulOpportunities / opportunities : 0 };
 }

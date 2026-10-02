@@ -1,6 +1,7 @@
 import { logInput } from "@/lib/validation";
 import { ApiError, jsonBody, result, withApi } from "@/lib/api";
-import { isHabitScheduledForDate, type Habit } from "@/lib/domain";
+import { habitOnDate, type Habit, type ScheduleVersion } from "@/lib/domain";
+import { LogRuleError, prepareLog } from "@/lib/logging";
 export async function GET(request: Request) { return withApi(request, async ({ client, user }) => {
   const url = new URL(request.url); const from = url.searchParams.get("from"), to = url.searchParams.get("to");
   if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to || (Date.parse(to) - Date.parse(from)) > 366 * 86400000) throw new ApiError(400, "Choose a valid range up to one year.");
@@ -12,12 +13,15 @@ export async function PUT(request: Request) { return withApi(request, async ({ c
   const { data, error } = await client.from("habits").select("*").eq("id", input.habit_id).eq("user_id", user.id).single();
   if (error || !data) throw new ApiError(404, "Habit not found.");
   const habit = data as Habit;
-  if (!isHabitScheduledForDate(habit, input.date)) throw new ApiError(400, "Habit is not scheduled for this date.");
+  const { data: revisions, error: revisionError } = await client.from("habit_schedule_versions").select("*").eq("habit_id", habit.id).eq("user_id", user.id).lte("effective_date", input.date).order("effective_date", { ascending: false }).limit(1);
+  if (revisionError) throw revisionError;
+  const datedHabit = habitOnDate(habit, (revisions ?? []) as ScheduleVersion[], input.date);
+  let prepared;
+  try { prepared = prepareLog(datedHabit, input.date, input.status, input.value); } catch (e) { if (e instanceof LogRuleError) throw new ApiError(400, e.message); throw e; }
   if (input.status === null) {
     const deleted = await client.from("habit_logs").delete().eq("habit_id", habit.id).eq("user_id", user.id).eq("date", input.date);
     result(null, deleted.error); return { log: null };
   }
-  if (habit.tracking_type === "MEASURABLE" && input.status === "COMPLETED" && input.value == null) throw new ApiError(400, "A value is required.");
-  const { data: saved, error: saveError } = await client.from("habit_logs").upsert({ habit_id: habit.id, user_id: user.id, date: input.date, status: input.status, value: input.status === "COMPLETED" ? (input.value ?? null) : null, updated_at: new Date().toISOString() }, { onConflict: "habit_id,date" }).select().single();
+  const { data: saved, error: saveError } = await client.from("habit_logs").upsert({ habit_id: habit.id, user_id: user.id, date: input.date, ...prepared, updated_at: new Date().toISOString() }, { onConflict: "habit_id,date" }).select().single();
   return { log: result(saved, saveError) };
 }); }
