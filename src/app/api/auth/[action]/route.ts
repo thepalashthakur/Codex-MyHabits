@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { cookieClient } from "@/lib/supabase";
+import { cookieClient, isConfigured } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
 const credentials = z.object({ email: z.email().max(254), password: z.string().min(1).max(128) });
 type Context = { params: Promise<{ action: string }> };
 export async function POST(request: Request, { params }: Context) {
   const action = (await params).action;
   if (!["sign-in", "sign-up", "sign-out"].includes(action)) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!isConfigured()) return NextResponse.json({ error: "Connect Supabase to enable sign-in." }, { status: 503 });
   const origin = request.headers.get("origin");
   if (origin !== new URL(request.url).origin || request.headers.get("sec-fetch-site") === "cross-site") return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   let body: unknown;

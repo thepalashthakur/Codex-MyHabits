@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { ThemeBoot } from "@/components/theme-boot";
+export const dynamic = "force-dynamic";
 const links = [["Today", "/today"], ["Habits", "/habits"], ["History", "/history"], ["Analytics", "/analytics"], ["Areas", "/areas"], ["Settings", "/settings"]];
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
