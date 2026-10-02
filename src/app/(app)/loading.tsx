@@ -1,0 +1,1 @@
+export default function Loading() { return <div><div className="skeleton" style={{ width: 220, height: 35 }}/><div className="grid">{[1,2,3].map(i=><div className="skeleton" key={i} style={{height:110}}/>)}</div><div className="skeleton"/><div className="skeleton"/></div>; }
