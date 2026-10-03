@@ -28,12 +28,12 @@ The REST API is under `/api/v1`: `areas`, `habits`, `logs`, `notes`, `reminders`
 
 ## Verification and deployment
 
-Run `npm test`, `npm run lint`, `npm run typecheck`, and `npm run build`. Add the same three environment variables in Vercel and configure the deployed URL in Supabase Auth before deploying. No background process is required.
+Run `npm test`, `npm run lint`, `npm run typecheck`, and `npm run build`. The Vercel project `myhabits` is linked and its first production deployment is at `https://myhabits-dun.vercel.app` with deployment protection. `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` are configured in Vercel; `APP_URL` is set for production. Redeploy after applying the migrations and add `/auth/confirm` to the shared Supabase Auth redirect URLs. No background process is required.
 
 ## Current limits
 
 - Reminder times are stored, but no notification delivery is configured.
 - Analytics offers 7 days, 30 days, 3 months, 6 months, 1 year, and all time. Large accounts currently load and aggregate paginated logs in the server process; database-side aggregates would improve latency at scale.
 - Weekly and monthly target streaks use the current target for earlier periods when a target has changed. Daily, weekday, and interval history uses schedule snapshots.
-- The UI and build can be checked locally without Supabase credentials, but authenticated database, RLS, and live MCP flows require a configured Supabase project. No Vercel deployment has been made.
+- The UI and build have been checked locally and the deployed sign-in route responds. Authenticated database, RLS, and live MCP flows remain unverified until the `tracker_*` migrations are applied and an authenticated test account is used.
 - `https://s3-sync.vercel.app` is a separate deployed service. MyHabits does not use it because habits have no file uploads.
