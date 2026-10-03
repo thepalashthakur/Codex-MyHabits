@@ -14,7 +14,7 @@ A Next.js habit tracker with Supabase Auth and PostgreSQL, user scoped REST endp
 1. Use the same Supabase project as UseAuth and apply the SQL files in `supabase/migrations` in filename order. The tracker tables all start with `tracker_`; the existing `profiles`, `areas`, `habits`, and `habit_logs` tables belong to another schema and must be left alone.
 2. Copy `.env.example` to `.env.local` and set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` to the **same project values** used by UseAuth, plus `APP_URL` (for example, `http://localhost:3000`). These are server environment variables; do not prefix the key with `NEXT_PUBLIC_`.
 3. In Supabase Auth, enable email/password and allow your app URL and `/auth/confirm` as a redirect. This app uses Supabase Auth email confirmation when enabled.
-4. Run `npm install` and `npm run dev`. Existing UseAuth users can sign in at `/sign-in`; new users can use `/sign-up` after adding the MyHabits callback URL in Supabase Auth.
+4. Use Node.js 24, run `npm install` and `npm run dev`. Existing UseAuth users can sign in at `/sign-in`; new users can use `/sign-up` after adding `https://myhabits-dun.vercel.app/auth/confirm` to the shared Supabase Auth redirect URLs.
 
 `tracker_profiles`, `tracker_areas`, `tracker_habits`, `tracker_habit_logs`, `tracker_habit_notes`, `tracker_habit_reminders`, and `tracker_habit_schedule_versions` have RLS. Queries and mutations also filter by the authenticated `user_id`. The client never supplies an authoritative user ID. Deleting an area sets its habits' `area_id` to null. Deleting a habit cascades to its logs, notes, reminders, and versions.
 
