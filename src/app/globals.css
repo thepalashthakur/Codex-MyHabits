@@ -61,3 +61,9 @@ html[data-theme="dark"]{--sidebar:#252422}
 .mobile-nav a.active{color:var(--ink);font-weight:700}
 @media(prefers-color-scheme:dark){html:not([data-theme="light"]) .nav a.active{background:#393630}}
 html[data-theme="dark"] .nav a.active{background:#393630}
+:root{--app-bg:var(--bg);--surface:var(--panel);--ink-hover:#3a3834;--sidebar-hover:#f0ede5}
+html[data-theme=dark]{--ink-hover:#e5e1d6;--sidebar-hover:#393630}
+@media(prefers-color-scheme:dark){html:not([data-theme=light]){--ink-hover:#e5e1d6;--sidebar-hover:#393630}}
+
+:root{--app-bg:var(--bg);--surface:var(--panel);--panel:#fffcf2;--paper:#fffcf2;--sidebar:#f5f2e9;--ink:#252422;--accent:#eb5e28}
+html[data-theme=light]{--bg:#fffcf2;--panel:#fffcf2;--surface:#fffcf2;--app-bg:#fffcf2}

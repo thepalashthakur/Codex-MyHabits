@@ -12,6 +12,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@emotion/cache": "^11.14.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^9.4.0",
+    "@mui/material-nextjs": "^9.4.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.2",
     "lucide-react": "^0.468.0",
@@ -31,5 +36,7 @@
     "typescript": "^6.0.3",
     "vitest": "^5.0.0"
   },
-  "engines": { "node": "24.x" }
+  "engines": {
+    "node": "24.x"
+  }
 }
