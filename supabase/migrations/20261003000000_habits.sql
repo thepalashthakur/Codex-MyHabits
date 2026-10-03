@@ -1,11 +1,12 @@
-create table public.profiles (
+-- Dedicated tracker tables share auth.users with UseAuth without altering other apps' tables.
+create table public.tracker_profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   timezone text not null default 'UTC',
   theme text not null default 'system' check (theme in ('light','dark','system')),
   updated_at timestamptz not null default now()
 );
 
-create table public.areas (
+create table public.tracker_areas (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null check (length(trim(name)) between 1 and 80),
@@ -17,7 +18,7 @@ create table public.areas (
   unique (id, user_id)
 );
 
-create table public.habits (
+create table public.tracker_habits (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   area_id uuid,
@@ -39,11 +40,11 @@ create table public.habits (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (id, user_id),
-  foreign key (area_id, user_id) references public.areas(id, user_id) on delete set null (area_id),
+  foreign key (area_id, user_id) references public.tracker_areas(id, user_id) on delete set null (area_id),
   check (tracking_type = 'BOOLEAN' or (goal_value is not null and unit is not null and length(trim(unit)) > 0))
 );
 
-create table public.habit_logs (
+create table public.tracker_habit_logs (
   id uuid primary key default gen_random_uuid(),
   habit_id uuid not null,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -52,11 +53,11 @@ create table public.habit_logs (
   value numeric(12,3) check (value is null or value >= 0),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  foreign key (habit_id, user_id) references public.habits(id, user_id) on delete cascade,
+  foreign key (habit_id, user_id) references public.tracker_habits(id, user_id) on delete cascade,
   unique (habit_id, date)
 );
 
-create table public.habit_notes (
+create table public.tracker_habit_notes (
   id uuid primary key default gen_random_uuid(),
   habit_id uuid not null,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -64,10 +65,10 @@ create table public.habit_notes (
   content text not null check (length(trim(content)) between 1 and 4000),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  foreign key (habit_id, user_id) references public.habits(id, user_id) on delete cascade
+  foreign key (habit_id, user_id) references public.tracker_habits(id, user_id) on delete cascade
 );
 
-create table public.habit_reminders (
+create table public.tracker_habit_reminders (
   id uuid primary key default gen_random_uuid(),
   habit_id uuid not null,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -76,26 +77,28 @@ create table public.habit_reminders (
   enabled boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  foreign key (habit_id, user_id) references public.habits(id, user_id) on delete cascade
+  foreign key (habit_id, user_id) references public.tracker_habits(id, user_id) on delete cascade
 );
 
-create index habits_user_active_idx on public.habits(user_id, is_archived, position);
-create index logs_user_date_idx on public.habit_logs(user_id, date);
-create index logs_habit_date_idx on public.habit_logs(habit_id, date);
-create index notes_habit_idx on public.habit_notes(habit_id, created_at desc);
-create index areas_user_idx on public.areas(user_id, position);
-create index reminders_user_idx on public.habit_reminders(user_id, habit_id);
+create index tracker_habits_user_active_idx on public.tracker_habits(user_id, is_archived, position);
+create index tracker_logs_user_date_idx on public.tracker_habit_logs(user_id, date);
+create index tracker_logs_habit_date_idx on public.tracker_habit_logs(habit_id, date);
+create index tracker_notes_habit_idx on public.tracker_habit_notes(habit_id, created_at desc);
+create index tracker_areas_user_idx on public.tracker_areas(user_id, position);
+create index tracker_reminders_user_idx on public.tracker_habit_reminders(user_id, habit_id);
 
-alter table public.profiles enable row level security;
-alter table public.areas enable row level security;
-alter table public.habits enable row level security;
-alter table public.habit_logs enable row level security;
-alter table public.habit_notes enable row level security;
-alter table public.habit_reminders enable row level security;
+alter table public.tracker_profiles enable row level security;
+alter table public.tracker_areas enable row level security;
+alter table public.tracker_habits enable row level security;
+alter table public.tracker_habit_logs enable row level security;
+alter table public.tracker_habit_notes enable row level security;
+alter table public.tracker_habit_reminders enable row level security;
 
-create policy profiles_own on public.profiles for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
-create policy areas_own on public.areas for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
-create policy habits_own on public.habits for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
-create policy logs_own on public.habit_logs for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
-create policy notes_own on public.habit_notes for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
-create policy reminders_own on public.habit_reminders for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy profiles_own on public.tracker_profiles for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy areas_own on public.tracker_areas for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy habits_own on public.tracker_habits for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy logs_own on public.tracker_habit_logs for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy notes_own on public.tracker_habit_notes for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy reminders_own on public.tracker_habit_reminders for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+
+grant select, insert, update, delete on public.tracker_profiles, public.tracker_areas, public.tracker_habits, public.tracker_habit_logs, public.tracker_habit_notes, public.tracker_habit_reminders to authenticated;

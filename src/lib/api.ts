@@ -25,7 +25,7 @@ export async function jsonBody(request: Request) {
   if (Number(request.headers.get("content-length") ?? 0) > 32768) throw new ApiError(413, "Request too large.");
   try { return await request.json() as unknown; } catch { throw new ApiError(400, "Invalid JSON."); }
 }
-export async function owned(context: Context, table: "habits" | "areas" | "habit_notes" | "habit_reminders", id: string) {
+export async function owned(context: Context, table: "tracker_habits" | "tracker_areas" | "tracker_habit_notes" | "tracker_habit_reminders", id: string) {
   const { data, error } = await context.client.from(table).select("id").eq("id", id).eq("user_id", context.user.id).maybeSingle();
   if (error) throw error;
   if (!data) throw new ApiError(404, "Not found.");
