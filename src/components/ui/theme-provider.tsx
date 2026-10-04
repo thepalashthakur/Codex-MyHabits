@@ -2,89 +2,89 @@
 
 import CssBaseline from "@mui/material/CssBaseline";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
-import type { ReactNode } from "react";
+import type { PaletteMode } from "@mui/material";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-export const appTheme = createTheme({
-  palette: {
-    mode: "light",
-    primary: { main: "#252422" },
-    secondary: { main: "#eb5e28" },
-    background: { default: "#fffcf2", paper: "#fffcf2" },
-    text: { primary: "#252422", secondary: "#6e6b65" },
-    divider: "#e9e6de",
-  },
-  shape: { borderRadius: 8 },
-  typography: {
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif',
-    button: { textTransform: "none", fontWeight: 600, fontSize: 13 },
-    h1: { fontSize: "2.2rem", fontWeight: 700, letterSpacing: "-.04em" },
-    h2: { fontSize: "1.18rem", fontWeight: 650, letterSpacing: "-.025em" },
-  },
-  components: {
-    MuiCssBaseline: {
-      styleOverrides: {
-        body: { backgroundColor: "var(--app-bg)", color: "var(--ink)" },
-      },
+const systemFont = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
+export function createAppTheme(mode: PaletteMode) {
+  const dark = mode === "dark";
+  const colors = dark ? {
+    background: "#16181c", paper: "#202329", subtle: "#282c33", text: "#f5f6f8",
+    secondary: "#b4bac5", divider: "#383d46", primary: "#8ab8ff", hover: "#343943",
+  } : {
+    background: "#f6f7f9", paper: "#ffffff", subtle: "#eef1f5", text: "#20242b",
+    secondary: "#59616e", divider: "#dce1e8", primary: "#245fa6", hover: "#e7ecf3",
+  };
+
+  return createTheme({
+    palette: {
+      mode,
+      primary: { main: colors.primary, contrastText: dark ? "#101a29" : "#ffffff" },
+      secondary: { main: dark ? "#c4b5fd" : "#6652a3" },
+      success: { main: dark ? "#71d3a4" : "#207454" },
+      warning: { main: dark ? "#f0c277" : "#94600c" },
+      error: { main: dark ? "#ff9b9b" : "#ba3b42" },
+      info: { main: colors.primary },
+      background: { default: colors.background, paper: colors.paper },
+      text: { primary: colors.text, secondary: colors.secondary },
+      divider: colors.divider,
+      action: { hover: colors.hover, selected: colors.subtle, disabled: dark ? "#7b8390" : "#89919e" },
     },
-    MuiButton: {
-      defaultProps: { disableElevation: true },
-      styleOverrides: {
-        root: {
-          borderRadius: 8,
-          minHeight: 36,
-          padding: "8px 12px",
-          boxShadow: "none",
-          "&.MuiButton-contained": { backgroundColor: "var(--ink)", color: "var(--bg)" },
-          "&.MuiButton-contained:hover": { backgroundColor: "var(--ink-hover)" },
-          "&.MuiButton-outlined": { borderColor: "var(--line)", color: "var(--ink)", backgroundColor: "var(--surface)" },
-          "&.MuiButton-outlined:hover": { borderColor: "var(--muted)", backgroundColor: "var(--sidebar-hover)" },
-          "&.MuiButton-text": { color: "var(--ink)" },
-        },
-      },
+    shape: { borderRadius: 12 },
+    spacing: 8,
+    typography: {
+      fontFamily: systemFont,
+      h1: { fontSize: "clamp(1.85rem, 3vw, 2.5rem)", fontWeight: 650, letterSpacing: "-.035em", lineHeight: 1.15 },
+      h2: { fontSize: "1.4rem", fontWeight: 600, letterSpacing: "-.025em" },
+      h3: { fontSize: "1.1rem", fontWeight: 600, letterSpacing: "-.015em" },
+      body1: { lineHeight: 1.6 },
+      body2: { lineHeight: 1.5 },
+      button: { textTransform: "none", fontWeight: 600, letterSpacing: 0 },
     },
-    MuiIconButton: {
-      styleOverrides: {
-        root: { borderRadius: 8, color: "var(--muted)", "&:hover": { backgroundColor: "var(--sidebar-hover)" } },
-      },
+    transitions: { duration: { shortest: 120, shorter: 160, short: 200, standard: 240 } },
+    components: {
+      MuiCssBaseline: { styleOverrides: {
+        body: { backgroundColor: colors.background, color: colors.text },
+        "*:focus-visible": { outline: `2px solid ${colors.primary}`, outlineOffset: 2 },
+        "@media (prefers-reduced-motion: reduce)": { "*, *::before, *::after": { animationDuration: "0.01ms !important", transitionDuration: "0.01ms !important" } },
+      } },
+      MuiButton: { defaultProps: { disableElevation: true }, styleOverrides: {
+        root: { minHeight: 44, borderRadius: 10, paddingInline: 16 },
+        contained: { boxShadow: "none", "&:hover": { boxShadow: "none" } },
+        outlined: { borderColor: colors.divider, "&:hover": { borderColor: colors.primary, backgroundColor: colors.hover } },
+      } },
+      MuiIconButton: { styleOverrides: { root: { minWidth: 44, minHeight: 44, borderRadius: 10 } } },
+      MuiPaper: { defaultProps: { elevation: 0 }, styleOverrides: { root: { backgroundImage: "none" }, outlined: { borderColor: colors.divider } } },
+      MuiCard: { defaultProps: { variant: "outlined" }, styleOverrides: { root: { borderColor: colors.divider, boxShadow: "none" } } },
+      MuiDialog: { defaultProps: { fullWidth: true, maxWidth: "sm" }, styleOverrides: { paper: { borderRadius: 16, border: `1px solid ${colors.divider}` } } },
+      MuiTextField: { defaultProps: { variant: "outlined", size: "small" } },
+      MuiFormControl: { defaultProps: { size: "small" } },
+      MuiOutlinedInput: { styleOverrides: { root: { borderRadius: 10, backgroundColor: colors.paper, minHeight: 44 } } },
+      MuiInputLabel: { styleOverrides: { root: { color: colors.secondary } } },
+      MuiChip: { styleOverrides: { root: { borderRadius: 8, fontWeight: 600 } } },
+      MuiListItemButton: { styleOverrides: { root: { borderRadius: 10, minHeight: 44, "&.Mui-selected": { backgroundColor: colors.subtle }, "&.Mui-selected:hover": { backgroundColor: colors.hover } } } },
+      MuiAlert: { styleOverrides: { root: { borderRadius: 10 } } },
+      MuiSkeleton: { defaultProps: { animation: "wave" } },
+      MuiTooltip: { styleOverrides: { tooltip: { borderRadius: 8 } } },
     },
-    MuiPaper: {
-      styleOverrides: {
-        root: { backgroundImage: "none", color: "var(--ink)", backgroundColor: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, boxShadow: "none" },
-      },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: { border: "1px solid var(--line)", borderRadius: 12, boxShadow: "none" },
-      },
-    },
-    MuiOutlinedInput: {
-      styleOverrides: {
-        root: {
-          borderRadius: 8,
-          backgroundColor: "var(--surface)",
-          color: "var(--ink)",
-          "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--line)" },
-          "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "var(--muted)" },
-          "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#eb5e28", borderWidth: 1 },
-        },
-        input: { padding: "10px 12px", fontSize: 14 },
-      },
-    },
-    MuiInputLabel: { styleOverrides: { root: { display: "block", fontWeight: 400, color: "var(--muted)", "&.Mui-focused": { color: "var(--ink)" } } } },
-    MuiFormHelperText: { styleOverrides: { root: { color: "var(--muted)" } } },
-    MuiChip: { styleOverrides: { root: { borderRadius: 6, backgroundColor: "var(--sidebar)", color: "var(--ink)", fontWeight: 600 } } },
-    MuiListItemButton: {
-      styleOverrides: {
-        root: {
-          borderRadius: 8,
-          color: "var(--muted)",
-          "&.Mui-selected, &.Mui-selected:hover, &:hover": { backgroundColor: "var(--sidebar-hover)", color: "var(--ink)" },
-        },
-      },
-    },
-  },
-});
+  });
+}
 
 export function AppThemeProvider({ children }: { children: ReactNode }) {
-  return <ThemeProvider theme={appTheme}><CssBaseline />{children}</ThemeProvider>;
+  const [mode, setMode] = useState<PaletteMode>("light");
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const update = () => {
+      const preference = document.documentElement.dataset.theme;
+      setMode(preference === "dark" || (preference !== "light" && media.matches) ? "dark" : "light");
+    };
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    media.addEventListener("change", update);
+    return () => { observer.disconnect(); media.removeEventListener("change", update); };
+  }, []);
+  const theme = useMemo(() => createAppTheme(mode), [mode]);
+  return <ThemeProvider theme={theme}><CssBaseline />{children}</ThemeProvider>;
 }
