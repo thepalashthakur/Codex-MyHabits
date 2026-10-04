@@ -3,6 +3,13 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
+import MenuItem from "@mui/material/MenuItem";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Checkbox from "@mui/material/Checkbox";
+import Alert from "@mui/material/Alert";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import type { Area, Habit, ScheduleType } from "@/lib/domain";
 export function HabitForm({ areas, today, habit }: { areas: Area[]; today: string; habit?: Habit }) {
   const router = useRouter(); const [schedule, setSchedule] = useState<ScheduleType>(habit?.schedule_type ?? "DAILY"); const [tracking, setTracking] = useState(habit?.tracking_type ?? "BOOLEAN"); const [error, setError] = useState(""); const [pending, setPending] = useState(false);
@@ -13,12 +20,29 @@ export function HabitForm({ areas, today, habit }: { areas: Area[]; today: strin
     const body = { name: form.get("name"), description: form.get("description") || null, area_id: form.get("area_id") || null, type: form.get("type"), tracking_type: tracking, goal_value: tracking === "MEASURABLE" ? Number(form.get("goal_value")) : null, unit: tracking === "MEASURABLE" ? form.get("unit") : null, schedule_type: schedule, schedule_config, start_date: form.get("start_date"), end_date: form.get("end_date") || null, icon: form.get("icon") || null, color: form.get("color") || null };
     try { const response = await fetch(habit ? `/api/v1/habits/${habit.id}` : "/api/v1/habits", { method: habit ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const data = await response.json(); if (!response.ok) throw Error(data.error); router.push(`/habits/${data.habit.id}`); router.refresh(); } catch (e) { setError(e instanceof Error ? e.message : "Unable to save habit."); } finally { setPending(false); }
   }
-  return <form className="form" onSubmit={submit}><TextField label="Habit name" id="name" name="name" defaultValue={habit?.name} slotProps={{ htmlInput: { maxLength: 120 } }} placeholder="e.g. Read 30 pages" required autoFocus fullWidth/><div className="form-grid"><div className="field"><label htmlFor="type">Habit type</label><select id="type" name="type" defaultValue={habit?.type ?? "GOOD"}><option value="GOOD">Build a good habit</option><option value="BAD">Reduce a bad habit</option></select></div><div className="field"><label htmlFor="tracking">Tracking</label><select id="tracking" name="tracking" value={tracking} onChange={e => setTracking(e.target.value as Habit["tracking_type"])}><option value="BOOLEAN">Yes or no</option><option value="MEASURABLE">Measured amount</option></select></div></div>
-  {tracking === "MEASURABLE" && <div className="form-grid"><TextField label="Goal amount" id="goal_value" name="goal_value" type="number" slotProps={{ htmlInput: { min: 0.001, step: "any" } }} defaultValue={habit?.goal_value ?? ""} required/><TextField label="Unit" id="unit" name="unit" placeholder="pages, L, steps…" defaultValue={habit?.unit ?? ""} required/></div>}
-  <div className="form-grid"><div className="field"><label htmlFor="schedule">Schedule</label><select id="schedule" value={schedule} onChange={e => setSchedule(e.target.value as ScheduleType)}><option value="DAILY">Every day</option><option value="WEEKDAYS">Specific weekdays</option><option value="WEEKLY_TARGET">Times per week</option><option value="MONTHLY_TARGET">Times per month</option><option value="INTERVAL">Every N days</option></select></div><div className="field"><label htmlFor="start_date">Start date</label><input id="start_date" name="start_date" type="date" defaultValue={habit?.start_date ?? today} required/></div></div>
-  {schedule === "WEEKDAYS" && <fieldset className="field"><legend>On these days</legend><div className="checkboxes">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((day, i) => <label key={day}><input name={`weekday-${i}`} type="checkbox" defaultChecked={habit?.schedule_config.weekdays?.includes(i) ?? (i > 0 && i < 6)}/> {day}</label>)}</div></fieldset>}
-  {(schedule === "WEEKLY_TARGET" || schedule === "MONTHLY_TARGET") && <div className="field"><label htmlFor="target">Times per {schedule === "WEEKLY_TARGET" ? "week" : "month"}</label><input id="target" name="target" type="number" min="1" max={schedule === "WEEKLY_TARGET" ? 7 : 31} defaultValue={habit?.schedule_config.target ?? 3} required/></div>}
-  {schedule === "INTERVAL" && <div className="field"><label htmlFor="interval">Every how many days?</label><input id="interval" name="interval" type="number" min="1" max="365" defaultValue={habit?.schedule_config.interval ?? 2} required/></div>}
-  <details><summary>More options</summary><div className="form" style={{ paddingTop: 15 }}><div className="field"><label htmlFor="area_id">Area</label><select id="area_id" name="area_id" defaultValue={habit?.area_id ?? ""}><option value="">Uncategorized</option>{areas.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}</select></div><div className="field"><label htmlFor="description">Description</label><textarea id="description" name="description" rows={3} defaultValue={habit?.description ?? ""}/></div><div className="form-grid"><div className="field"><label htmlFor="end_date">End date</label><input id="end_date" name="end_date" type="date" defaultValue={habit?.end_date ?? ""}/></div><div className="field"><label htmlFor="icon">Icon or emoji</label><input id="icon" name="icon" maxLength={40} defaultValue={habit?.icon ?? ""}/></div></div><div className="field"><label htmlFor="color">Color</label><input id="color" name="color" type="color" defaultValue={habit?.color ?? "#eb5e28"}/></div></div></details>
-  {error && <p className="form-error" role="alert">{error}</p>}<div><Button variant="contained" type="submit" disabled={pending}>{pending ? "Saving…" : habit ? "Save changes" : "Create habit"}</Button></div></form>;
+  return <Paper component="form" variant="outlined" onSubmit={submit} sx={{ maxWidth: 720, p: { xs: 2, sm: 3 } }}>
+    <Stack spacing={2.5}>
+      <TextField label="Habit name" id="name" name="name" defaultValue={habit?.name} slotProps={{ htmlInput: { maxLength: 120 } }} placeholder="e.g. Read 30 pages" required autoFocus fullWidth/>
+      <div className="form-grid">
+        <TextField select label="Habit type" id="type" name="type" defaultValue={habit?.type ?? "GOOD"}><MenuItem value="GOOD">Build a good habit</MenuItem><MenuItem value="BAD">Reduce a bad habit</MenuItem></TextField>
+        <TextField select label="Tracking" id="tracking" name="tracking" value={tracking} onChange={e => setTracking(e.target.value as Habit["tracking_type"])}><MenuItem value="BOOLEAN">Yes or no</MenuItem><MenuItem value="MEASURABLE">Measured amount</MenuItem></TextField>
+      </div>
+      {tracking === "MEASURABLE" && <div className="form-grid"><TextField label="Goal amount" id="goal_value" name="goal_value" type="number" slotProps={{ htmlInput: { min: 0.001, step: "any" } }} defaultValue={habit?.goal_value ?? ""} required/><TextField label="Unit" id="unit" name="unit" placeholder="pages, L, steps…" defaultValue={habit?.unit ?? ""} required/></div>}
+      <div className="form-grid">
+        <TextField select label="Schedule" id="schedule" value={schedule} onChange={e => setSchedule(e.target.value as ScheduleType)}><MenuItem value="DAILY">Every day</MenuItem><MenuItem value="WEEKDAYS">Specific weekdays</MenuItem><MenuItem value="WEEKLY_TARGET">Times per week</MenuItem><MenuItem value="MONTHLY_TARGET">Times per month</MenuItem><MenuItem value="INTERVAL">Every N days</MenuItem></TextField>
+        <TextField label="Start date" id="start_date" name="start_date" type="date" defaultValue={habit?.start_date ?? today} required slotProps={{ inputLabel: { shrink: true } }}/>
+      </div>
+      {schedule === "WEEKDAYS" && <fieldset className="field"><legend>On these days</legend><div className="checkboxes">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((day, i) => <FormControlLabel key={day} control={<Checkbox name={`weekday-${i}`} defaultChecked={habit?.schedule_config.weekdays?.includes(i) ?? (i > 0 && i < 6)}/>} label={day}/>)}</div></fieldset>}
+      {(schedule === "WEEKLY_TARGET" || schedule === "MONTHLY_TARGET") && <TextField label={`Times per ${schedule === "WEEKLY_TARGET" ? "week" : "month"}`} id="target" name="target" type="number" slotProps={{ htmlInput: { min: 1, max: schedule === "WEEKLY_TARGET" ? 7 : 31 } }} defaultValue={habit?.schedule_config.target ?? 3} required/>}
+      {schedule === "INTERVAL" && <TextField label="Every how many days?" id="interval" name="interval" type="number" slotProps={{ htmlInput: { min: 1, max: 365 } }} defaultValue={habit?.schedule_config.interval ?? 2} required/>}
+      <details><summary>More options</summary><Stack spacing={2} sx={{ pt: 2 }}>
+        <TextField select label="Area" id="area_id" name="area_id" defaultValue={habit?.area_id ?? ""}><MenuItem value="">Uncategorized</MenuItem>{areas.map(area => <MenuItem key={area.id} value={area.id}>{area.name}</MenuItem>)}</TextField>
+        <TextField label="Description" id="description" name="description" multiline minRows={3} defaultValue={habit?.description ?? ""}/>
+        <div className="form-grid"><TextField label="End date" id="end_date" name="end_date" type="date" defaultValue={habit?.end_date ?? ""} slotProps={{ inputLabel: { shrink: true } }}/><TextField label="Icon or emoji" id="icon" name="icon" slotProps={{ htmlInput: { maxLength: 40 } }} defaultValue={habit?.icon ?? ""}/></div>
+        <Stack spacing={1}><Typography component="label" htmlFor="color" variant="body2">Color</Typography><input id="color" name="color" type="color" defaultValue={habit?.color ?? "#245fa6"}/></Stack>
+      </Stack></details>
+      {error && <Alert severity="error" role="alert">{error}</Alert>}
+      <Button variant="contained" type="submit" disabled={pending} sx={{ alignSelf: "flex-start" }}>{pending ? "Saving…" : habit ? "Save changes" : "Create habit"}</Button>
+    </Stack>
+  </Paper>;
 }

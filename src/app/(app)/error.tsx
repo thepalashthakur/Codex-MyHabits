@@ -1,2 +1,5 @@
 "use client";
-export default function ErrorPage({ reset }: { error: Error; reset: () => void }) { return <div className="card empty"><h2>Could not load this page</h2><p>Please try again.</p><button className="button primary" onClick={reset}>Retry</button></div>; }
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import Stack from "@mui/material/Stack";
+export default function ErrorPage({ reset }: { error: Error; reset: () => void }) { return <Stack spacing={2} sx={{ maxWidth: 560 }}><Alert severity="error">Could not load this page. Please try again.</Alert><Button variant="contained" onClick={reset} sx={{ alignSelf: "flex-start" }}>Retry</Button></Stack>; }
