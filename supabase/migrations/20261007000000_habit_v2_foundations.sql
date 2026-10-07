@@ -54,3 +54,25 @@ alter table public.tracker_habit_relationships enable row level security;
 create policy relationships_own on public.tracker_habit_relationships for all to authenticated
   using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 grant select, insert, delete on public.tracker_habit_relationships to authenticated;
+
+create function public.tracker_prevent_relationship_cycle() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  -- Serialize graph edits for one user so concurrent inserts cannot form a cycle.
+  perform pg_advisory_xact_lock(hashtext(new.user_id::text));
+  if exists (
+    with recursive descendants(id) as (
+      select new.target_habit_id
+      union
+      select r.target_habit_id from public.tracker_habit_relationships r
+      join descendants d on r.source_habit_id = d.id
+      where r.user_id = new.user_id
+    )
+    select 1 from descendants where id = new.source_habit_id
+  ) then
+    raise exception 'Habit relationship would create a cycle' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+create trigger tracker_relationship_cycle before insert on public.tracker_habit_relationships
+for each row execute function public.tracker_prevent_relationship_cycle();
