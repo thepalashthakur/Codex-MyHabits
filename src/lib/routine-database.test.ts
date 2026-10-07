@@ -23,18 +23,8 @@ test("routine SQL preserves history, deduplicates generation and habit check-ins
         select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
       $$;
     `);
-    for (const migration of [
-      "20261003000000_habits.sql",
-      "20261003010000_habit_schedule_history.sql",
-      "20261007000000_habit_v2_foundations.sql",
-      "20261008000000_routines.sql",
-    ]) {
-      // PGlite does not provide btree_gist. Production PostgreSQL runs the unmodified migrations.
-      const sql = readFileSync(join(process.cwd(), "supabase/migrations", migration), "utf8")
-        .replace("create extension if not exists btree_gist;", "")
-        .replace(/^  exclude using gist .*$/gm, "  check (true)");
-      await db.exec(sql);
-    }
+    const sql = readFileSync(join(process.cwd(), "supabase/migrations/20261007000000_myhabits.sql"), "utf8");
+    await db.exec(sql);
     await db.exec(`insert into auth.users values ('${userId}');`);
     await query("select set_config('request.jwt.claim.sub', $1, false)", [userId]);
     await query("insert into public.tracker_habits(id,user_id,name,type,tracking_type,schedule_type,start_date) values ($1,$2,'Brush teeth','GOOD','BOOLEAN','DAILY','2099-01-01')", [habitId, userId]);
@@ -99,6 +89,10 @@ test("routine SQL preserves history, deduplicates generation and habit check-ins
     await expect(materialize("2099-01-04")).rejects.toThrow("Routine is not scheduled");
     await query("select public.tracker_routine_lifecycle($1,'RESUME')", [routineId]);
     expect((await query<{ is_paused: boolean }>("select is_paused from public.tracker_routines where id=$1", [routineId]))[0].is_paused).toBe(false);
+    await query("insert into public.tracker_routine_pauses(routine_id,user_id,start_date,end_date) values ($1,$2,'2099-02-01','2099-02-10')", [routineId, userId]);
+    await expect(query("insert into public.tracker_routine_pauses(routine_id,user_id,start_date,end_date) values ($1,$2,'2099-02-05','2099-02-12')", [routineId, userId])).rejects.toThrow("pause periods cannot overlap");
+    await query("insert into public.tracker_habit_pauses(habit_id,user_id,start_date,end_date) values ($1,$2,'2099-03-01','2099-03-10')", [habitId, userId]);
+    await expect(query("insert into public.tracker_habit_pauses(habit_id,user_id,start_date,end_date) values ($1,$2,'2099-03-08','2099-03-12')", [habitId, userId])).rejects.toThrow("pause periods cannot overlap");
 
     const pastRoutineId = "66666666-6666-4666-8666-666666666666";
     const pastItemId = "77777777-7777-4777-8777-777777777777";
@@ -110,6 +104,52 @@ test("routine SQL preserves history, deduplicates generation and habit check-ins
     await query("select public.tracker_close_routine_occurrences()");
     expect((await query<{ status: string }>("select status from public.tracker_routine_occurrences where id=$1", [missed]))[0].status).toBe("MISSED");
     await expect(query("select public.tracker_routine_action($1,'START')", [missed])).rejects.toThrow("window has closed");
+    await db.exec(sql);
+    expect((await query<{ count: number }>("select count(*)::integer count from public.tracker_habits where id=$1", [habitId]))[0].count).toBe(1);
+  } finally {
+    await db.close();
+  }
+});
+
+test("the single migration upgrades an existing V1 habit database without deleting records", async () => {
+  const db = new PGlite();
+  const sql = readFileSync(join(process.cwd(), "supabase/migrations/20261007000000_myhabits.sql"), "utf8");
+  const phase = (number: number) => {
+    const body = sql.split(`$myhabits_phase_${number}$`)[1];
+    if (!body) throw Error(`Missing migration phase ${number}`);
+    return body;
+  };
+  try {
+    await db.exec("create role authenticated; create schema auth; create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;");
+    await db.exec(phase(1));
+    await db.query("insert into auth.users(id) values ($1)", [userId]);
+    await db.query("insert into public.tracker_habits(id,user_id,name,type,tracking_type,schedule_type,start_date) values ($1,$2,'Existing habit','GOOD','BOOLEAN','DAILY','2026-01-01')", [habitId, userId]);
+    await db.exec(phase(2));
+    await db.exec(sql);
+    expect((await db.query<{ name: string }>("select name from public.tracker_habits where id=$1", [habitId])).rows[0].name).toBe("Existing habit");
+    expect((await db.query<{ count: number }>("select count(*)::integer count from public.tracker_habit_schedule_versions where habit_id=$1", [habitId])).rows[0].count).toBe(1);
+    expect((await db.query<{ installed: string }>("select to_regclass('public.tracker_routines')::text installed")).rows[0].installed).toBe("tracker_routines");
+  } finally {
+    await db.close();
+  }
+});
+
+test("the single migration resumes after a partial routine table creation", async () => {
+  const db = new PGlite();
+  const sql = readFileSync(join(process.cwd(), "supabase/migrations/20261007000000_myhabits.sql"), "utf8");
+  const phase = (number: number) => {
+    const body = sql.split(`$myhabits_phase_${number}$`)[1];
+    if (!body) throw Error(`Missing migration phase ${number}`);
+    return body;
+  };
+  try {
+    await db.exec("create role authenticated; create schema auth; create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;");
+    for (const number of [1, 2, 3]) await db.exec(phase(number));
+    const partialTable = phase(4).match(/create table if not exists public\.tracker_routines \([\s\S]*?\n\);/)?.[0];
+    if (!partialTable) throw Error("Missing routine table definition");
+    await db.exec(partialTable);
+    await db.exec(sql);
+    expect((await db.query<{ installed: string }>("select to_regclass('public.tracker_routine_occurrences')::text installed")).rows[0].installed).toBe("tracker_routine_occurrences");
   } finally {
     await db.close();
   }

@@ -2,7 +2,7 @@
 
 ## Reuse and migration
 
-Keep the Next.js App Router, MUI theme, Supabase Auth/RLS, REST routes, schedule-version trigger, single log per habit/date, timezone handling, and existing notes/reminders. Preserve all V1 tables and rows. Add nullable or defaulted habit metadata, pause periods, relationships, and optional log reasons in additive SQL migrations. Do not change old logs or reset schedules. Apply migrations in filename order before enabling new controls in production.
+Keep the Next.js App Router, MUI theme, Supabase Auth/RLS, REST routes, schedule-version trigger, single log per habit/date, timezone handling, and existing notes/reminders. Preserve all V1 tables and rows. Add nullable or defaulted habit metadata, pause periods, relationships, and optional log reasons through the single additive `supabase/migrations/20261007000000_myhabits.sql` file. It handles fresh installation and upgrades of existing tracker data in one transaction. Do not change old logs or reset schedules. Apply it before enabling new controls in production.
 
 ## Domain and services
 
@@ -18,4 +18,4 @@ Extend `domain.ts` as the source of truth for dated schedule state, pauses, part
 
 ## Verification
 
-Run deterministic domain/API validation tests and the existing suite, lint, type checks, and build after meaningful phases. Review desktop and mobile flows in a browser. Live authenticated persistence and RLS checks require the production Supabase migrations and a test account.
+Run deterministic domain/API validation tests and the existing suite, lint, type checks, and build after meaningful phases. Review desktop and mobile flows in a browser. Live authenticated persistence and RLS checks require the complete Supabase schema and a test account.

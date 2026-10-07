@@ -7,11 +7,11 @@ A Next.js habit tracker with Supabase Auth and PostgreSQL, user scoped REST endp
 - `src/app/(app)` contains the authenticated screens: Today, Habits, Areas, History, Insights, and Settings. `/analytics` redirects to Insights.
 - `src/lib/domain.ts` contains dated schedule, pause, goal-tier, streak, and statistics functions. `src/lib/insights.ts` builds period comparisons, rankings, and weekly reviews. Server components query Supabase through `src/lib/data.ts`; interactive controls call HTTP route handlers.
 - `src/lib/auth.ts` wraps Supabase Auth. It follows the same email/password and server cookie pattern as the supplied `UseAuth` reference repo, deployed at `https://use-auth-rosy.vercel.app`. MyHabits must use **the same Supabase project** so existing UseAuth accounts can sign in here. The UseAuth hosted cookie cannot be shared across these domains; users sign in on MyHabits to establish its own secure session. No second identity provider or service role key is used. Bearer requests use the same Supabase user identity.
-- `supabase/migrations` defines tables, foreign keys, indexes, RLS, and schedule snapshots. The V2 migration adds planning metadata, pause periods, routine relationships, and optional skip reasons. History uses the version effective on the viewed date. A skip preserves a streak without increasing it; pauses are excluded from scheduled opportunities. Weekly and monthly target streaks count successful periods.
+- `supabase/migrations/20261007000000_myhabits.sql` is the single complete schema file. It installs missing phases for habits, schedule history, V2 planning, and routines in one transaction while retaining existing tracker rows. History uses the version effective on the viewed date. A skip preserves a streak without increasing it; pauses are excluded from scheduled opportunities. Weekly and monthly target streaks count successful periods.
 
 ## Setup
 
-1. Use the same Supabase project as UseAuth and apply the SQL files in `supabase/migrations` in filename order. The tracker tables all start with `tracker_`; the existing `profiles`, `areas`, `habits`, and `habit_logs` tables belong to another schema and must be left alone.
+1. Use the same Supabase project as UseAuth. Run the entire `supabase/migrations/20261007000000_myhabits.sql` file once in Supabase SQL Editor. It can also upgrade an existing MyHabits V1/V2 schema and be rerun safely. The tracker tables all start with `tracker_`; the existing `profiles`, `areas`, `habits`, and `habit_logs` tables belong to another schema and must be left alone.
 2. Copy `.env.example` to `.env.local` and set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` to the **same project values** used by UseAuth, plus `APP_URL` (for example, `http://localhost:3000`). These are server environment variables; do not prefix the key with `NEXT_PUBLIC_`.
 3. In Supabase Auth, enable email/password and allow your app URL and `/auth/confirm` as a redirect. This app uses Supabase Auth email confirmation when enabled.
 4. Use Node.js 24, run `npm install` and `npm run dev`. Existing UseAuth users can sign in at `/sign-in`; new users can use `/sign-up` after adding `https://myhabits-dun.vercel.app/auth/confirm` to the shared Supabase Auth redirect URLs.
@@ -33,7 +33,7 @@ The REST API is under `/api/v1`: `areas`, `habits`, `logs`, `notes`, `reminders`
 
 ## Routines
 
-Routines are reusable templates with nested groups, tasks, and references to existing habits. The implementation lives in `src/lib/routines.ts` (recurrence and progress), `src/lib/routine-data.ts` (materialization and queries), `/routines` (planning/history), `/routine-occurrences` (execution), and `/api/v1/routines` and `/api/v1/routine-occurrences` (mutations). `20261008000000_routines.sql` adds the definition, pause, occurrence, and item-snapshot tables plus user-scoped transaction functions. Apply it **after** the V2 foundations migration and before deploying this code.
+Routines are reusable templates with nested groups, tasks, and references to existing habits. The implementation lives in `src/lib/routines.ts` (recurrence and progress), `src/lib/routine-data.ts` (materialization and queries), `/routines` (planning/history), `/routine-occurrences` (execution), and `/api/v1/routines` and `/api/v1/routine-occurrences` (mutations). The single schema file adds the definition, pause, occurrence, and item-snapshot tables plus user-scoped transaction functions.
 
 Routine dates use each routine's IANA timezone. A preferred start time is guidance: users can start earlier. The scheduling window closes at the end of the planned local calendar day. An unstarted occurrence becomes `MISSED`; one started with unfinished required steps becomes `PARTIAL`. Optional leaves and groups do not block completion. A monthly rule can skip nonexistent dates or run on the last day of a shorter month. Child overrides filter the parent's dates. The original `scheduled_date` is an immutable occurrence identity; rescheduling changes `planned_date`, and a future reschedule changes the planned offset without moving the recurrence anchor. Step title, instructions, and required status can be edited for this occurrence or for the template plus future unstarted occurrences.
 
@@ -45,12 +45,12 @@ Because generation is lazy, an old date first opened after a template edit uses 
 
 ## Verification and deployment
 
-Run `npm test`, `npm run lint`, `npm run typecheck`, and `npm run build`. Apply `20261007000000_habit_v2_foundations.sql` to the shared Supabase project **before** deploying the V2 application; the new UI and API expect its columns and tables. The Vercel project `myhabits` is linked and its first production deployment is at `https://myhabits-dun.vercel.app` with deployment protection. `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` are configured in Vercel; `APP_URL` is set for production. Add `/auth/confirm` to the shared Supabase Auth redirect URLs. No background process is required.
+Run `npm test`, `npm run lint`, `npm run typecheck`, and `npm run build`. Apply the single schema file to the shared Supabase project **before** deploying the V2 application; the new UI and API expect its columns and tables. The Vercel project `myhabits` is linked and its first production deployment is at `https://myhabits-dun.vercel.app` with deployment protection. `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` are configured in Vercel; `APP_URL` is set for production. Add `/auth/confirm` to the shared Supabase Auth redirect URLs. No background process is required.
 
 ## Current limits
 
 - Reminder times are stored, but no notification delivery is configured.
-- V2 JSON/CSV backup currently covers habits but not routine templates or occurrence history. Keep a database backup before routine migration or deployment changes.
+- V2 JSON/CSV backup currently covers habits but not routine templates or occurrence history. Keep a database backup before schema or deployment changes.
 - Insights aggregates paginated logs in the server process. Database-side aggregates would improve latency for accounts with years of activity.
 - Weekly and monthly target streaks use the current target for earlier periods when a target has changed. Daily, weekday, and interval history uses schedule snapshots.
 - The V2 database migration, authenticated database behavior, RLS, import round-trip, and live MCP flows require verification against the shared Supabase project with an authenticated test account.
