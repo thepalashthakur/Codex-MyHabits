@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import Link from "next/link";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
@@ -14,7 +15,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { Area } from "@/lib/domain";
 
-export function AreasManager({ initial, counts }: { initial: Area[]; counts: Record<string, number> }) {
+export function AreasManager({ initial, counts, performance }: { initial: Area[]; counts: Record<string, number>; performance: Record<string, { completed: number; opportunities: number; rate: number }> }) {
   const router = useRouter();
   const [areas, setAreas] = useState(initial);
   const [error, setError] = useState("");
@@ -49,7 +50,7 @@ export function AreasManager({ initial, counts }: { initial: Area[]; counts: Rec
     <Stack component="form" direction={{ xs: "column", sm: "row" }} spacing={1.5} onSubmit={add} sx={{ alignItems: { sm: "flex-end" } }}><TextField label="New area" name="name" placeholder="e.g. Health" slotProps={{ htmlInput: { maxLength: 80 } }} required sx={{ minWidth: { sm: 260 } }}/><Button variant="contained" type="submit">Add area</Button></Stack>
     {error && <Alert severity="error" role="alert">{error}</Alert>}
     <Typography variant="h2">Your areas</Typography>
-    {areas.length ? <Stack spacing={1.5}>{areas.map((area, index) => <Paper variant="outlined" key={area.id} sx={{ p: 2 }}><Stack direction={{ xs: "column", sm: "row" }} sx={{ alignItems: { sm: "center" }, justifyContent: "space-between", gap: 2 }}><div><Typography sx={{ fontWeight: 600 }}>{area.icon} {area.name}</Typography><Typography variant="body2" color="text.secondary">{counts[area.id] ?? 0} active habits</Typography></div><Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}><Button variant="outlined" size="small" disabled={index === 0} aria-label={`Move ${area.name} up`} onClick={() => move(area, -1)}>↑</Button><Button variant="outlined" size="small" disabled={index === areas.length - 1} aria-label={`Move ${area.name} down`} onClick={() => move(area, 1)}>↓</Button><Button size="small" onClick={() => { setEditing(area); setEditName(area.name); }}>Edit</Button><Button size="small" color="error" onClick={() => setDeleting(area)}>Delete</Button></Stack></Stack></Paper>)}</Stack> : <Paper variant="outlined" sx={{ p: 4, textAlign: "center" }}><Typography variant="h3">No areas yet</Typography><Typography color="text.secondary">Group related habits to see progress by area.</Typography></Paper>}
+    {areas.length ? <Stack spacing={1.5}>{areas.map((area, index) => <Paper variant="outlined" key={area.id} sx={{ p: 2 }}><Stack direction={{ xs: "column", sm: "row" }} sx={{ alignItems: { sm: "center" }, justifyContent: "space-between", gap: 2 }}><div><Typography component={Link} href={`/areas/${area.id}`} sx={{ fontWeight: 600, color: "text.primary", "&:hover": { color: "primary.main" } }}>{area.icon} {area.name}</Typography><Typography variant="body2" color="text.secondary">{performance[area.id]?.opportunities ? `${Math.round(performance[area.id].rate * 100)}% consistency · ` : ""}{counts[area.id] ?? 0} active habits</Typography></div><Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}><Button variant="outlined" size="small" disabled={index === 0} aria-label={`Move ${area.name} up`} onClick={() => move(area, -1)}>↑</Button><Button variant="outlined" size="small" disabled={index === areas.length - 1} aria-label={`Move ${area.name} down`} onClick={() => move(area, 1)}>↓</Button><Button size="small" onClick={() => { setEditing(area); setEditName(area.name); }}>Edit</Button><Button size="small" color="error" onClick={() => setDeleting(area)}>Delete</Button></Stack></Stack></Paper>)}</Stack> : <Paper variant="outlined" sx={{ p: 4, textAlign: "center" }}><Typography variant="h3">No areas yet</Typography><Typography color="text.secondary">Group related habits to see progress by area.</Typography></Paper>}
     <Dialog open={Boolean(editing)} onClose={() => setEditing(null)} aria-labelledby="edit-area-title"><DialogTitle id="edit-area-title">Edit area</DialogTitle><DialogContent><Stack component="form" id="edit-area-form" onSubmit={rename} sx={{ pt: 1 }}><TextField label="Area name" value={editName} onChange={e => setEditName(e.target.value)} required fullWidth/></Stack></DialogContent><DialogActions><Button onClick={() => setEditing(null)}>Cancel</Button><Button variant="contained" type="submit" form="edit-area-form">Save</Button></DialogActions></Dialog>
     <Dialog open={Boolean(deleting)} onClose={() => setDeleting(null)} aria-labelledby="delete-area-title"><DialogTitle id="delete-area-title">Delete area?</DialogTitle><DialogContent>Habits in this area will become uncategorized.</DialogContent><DialogActions><Button onClick={() => setDeleting(null)}>Cancel</Button><Button variant="contained" color="error" onClick={() => void remove()}>Delete</Button></DialogActions></Dialog>
   </Stack>;
