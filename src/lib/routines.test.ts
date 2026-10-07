@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parentFirst } from "./routine-data";
+import { isMissingRoutineSchema, parentFirst } from "./routine-data";
 import { routineInput } from "./routine-validation";
 import { applicableItems, effectiveStatus, localRoutineDate, occurrenceDates, progress, ruleMatches, type ItemOccurrence, type RoutineDefinition, type RoutineItem, type RoutineOccurrence } from "./routines";
 
@@ -9,6 +9,12 @@ const stretch: RoutineItem = { ...group, id: "s", parent_id: "g", type: "TASK", 
 const strength: RoutineItem = { ...stretch, id: "t", title: "Strength", position: 1, frequency_rule: { type: "WEEKDAYS", weekdays: [1, 3, 5] } };
 const occurrence: RoutineOccurrence = { id: "o", routine_id: "r", user_id: "u", scheduled_date: "2026-10-05", planned_date: "2026-10-05", planned_time: "07:00:00", timezone: "Asia/Kolkata", status: "SCHEDULED", started_at: null, ended_at: null };
 const itemOccurrence = (id: string, required: boolean, status: ItemOccurrence["status"]): ItemOccurrence => ({ id, occurrence_id: "o", source_item_id: id, parent_item_occurrence_id: null, position: 0, type: "TASK", title: id, instructions: null, estimated_minutes: null, required, reference_provider: null, reference_id: null, status, completed_at: null, skipped_at: null, habit_log_id: null, habit_tracking_type: null, habit_goal_value: null });
+
+it("recognizes an unapplied routine migration without hiding other database failures", () => {
+  expect(isMissingRoutineSchema({ code: "PGRST205" })).toBe(true);
+  expect(isMissingRoutineSchema({ code: "PGRST202" })).toBe(true);
+  expect(isMissingRoutineSchema({ code: "42501" })).toBe(false);
+});
 
 describe("routine recurrence", () => {
   it("uses local calendar dates and permits starting before preferred time", () => {

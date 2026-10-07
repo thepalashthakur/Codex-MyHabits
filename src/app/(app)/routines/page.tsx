@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
@@ -20,7 +21,8 @@ function description(rule: RoutineRule) {
 }
 export default async function Routines() {
   const data = await appData();
-  const { routines, items } = await routineDefinitions(data.client, data.user.id);
+  const { available, routines, items } = await routineDefinitions(data.client, data.user.id);
+  if (!available) return <><header className="page-head"><div><p className="eyebrow">REPEAT WHAT MATTERS</p><h1>Routines</h1></div></header><Alert severity="info">Routines are temporarily unavailable while setup is completed. Your habits remain available.</Alert></>;
   const active = routines.filter(routine => !routine.is_archived);
   const archived = routines.filter(routine => routine.is_archived);
   return <><header className="page-head"><div><p className="eyebrow">REPEAT WHAT MATTERS</p><h1>Routines</h1><p className="subtle">Tasks and habits, arranged around your day.</p></div><Link className="button primary" href="/routines/new">Create routine</Link></header>

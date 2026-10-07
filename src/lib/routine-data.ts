@@ -2,14 +2,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getScheduledHabits, shiftDate, type Habit, type HabitPause, type ScheduleVersion } from "./domain";
 import { applicableItems, localRoutineDate, routineRunsOn, type ItemOccurrence, type RoutineDefinition, type RoutineItem, type RoutineOccurrence, type RoutinePause } from "./routines";
 
+export function isMissingRoutineSchema(error: { code?: string; message?: string } | null) {
+  return Boolean(error && (error.code === "PGRST205" || error.code === "42P01" || error.code === "PGRST202"));
+}
+
 export async function routineDefinitions(client: SupabaseClient, userId: string) {
   const [routines, items, pauses] = await Promise.all([
     client.from("tracker_routines").select("*").eq("user_id", userId).order("created_at"),
     client.from("tracker_routine_items").select("*").eq("user_id", userId).order("position"),
     client.from("tracker_routine_pauses").select("*").eq("user_id", userId),
   ]);
+  if (isMissingRoutineSchema(routines.error) || isMissingRoutineSchema(items.error) || isMissingRoutineSchema(pauses.error)) {
+    return { available: false as const, routines: [] as RoutineDefinition[], items: [] as RoutineItem[], pauses: [] as RoutinePause[] };
+  }
   if (routines.error || items.error || pauses.error) throw Error("Unable to load routines.");
-  return { routines: routines.data as RoutineDefinition[], items: items.data as RoutineItem[], pauses: pauses.data as RoutinePause[] };
+  return { available: true as const, routines: routines.data as RoutineDefinition[], items: items.data as RoutineItem[], pauses: pauses.data as RoutinePause[] };
 }
 
 export function parentFirst<T extends { id: string; parent_id: string | null; position: number }>(items: T[]) {
