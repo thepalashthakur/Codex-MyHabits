@@ -138,3 +138,94 @@ begin
 end $$;
 revoke all on function public.tracker_reorder_habits(uuid[]) from public;
 grant execute on function public.tracker_reorder_habits(uuid[]) to authenticated;
+
+create function public.tracker_import_v2(p_data jsonb, p_mode text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  owner_id uuid := auth.uid(); item jsonb; old_id text; new_id uuid; mapped_id uuid;
+  area_map jsonb := '{}'::jsonb; habit_map jsonb := '{}'::jsonb; versioned jsonb := '{}'::jsonb;
+  existing_id uuid; inserted_habits integer := 0; skipped_habits integer := 0; inserted_areas integer := 0;
+begin
+  if owner_id is null or p_mode not in ('skip', 'copy') or p_data->>'format' <> 'myhabits-v2' or p_data->>'version' <> '2'
+     or jsonb_typeof(p_data->'areas') <> 'array' or jsonb_typeof(p_data->'habits') <> 'array'
+     or jsonb_typeof(p_data->'logs') <> 'array' or jsonb_typeof(p_data->'notes') <> 'array'
+     or jsonb_typeof(p_data->'reminders') <> 'array' or jsonb_typeof(p_data->'pauses') <> 'array'
+     or jsonb_typeof(p_data->'relationships') <> 'array' or jsonb_typeof(p_data->'versions') <> 'array'
+     or jsonb_array_length(p_data->'habits') > 5000 or jsonb_array_length(p_data->'logs') > 100000 then
+    raise exception 'Invalid MyHabits import' using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtext(owner_id::text));
+  for item in select * from jsonb_array_elements(p_data->'areas') loop
+    old_id := item->>'id';
+    existing_id := null;
+    select id into existing_id from public.tracker_areas where user_id = owner_id and lower(name) = lower(item->>'name') limit 1;
+    if existing_id is not null and p_mode = 'skip' then
+      area_map := jsonb_set(area_map, array[old_id], to_jsonb(existing_id::text));
+      continue;
+    end if;
+    insert into public.tracker_areas(user_id,name,color,icon,position)
+      values(owner_id,item->>'name',item->>'color',item->>'icon',coalesce((item->>'position')::integer,0)) returning id into new_id;
+    area_map := jsonb_set(area_map, array[old_id], to_jsonb(new_id::text));
+    inserted_areas := inserted_areas + 1;
+  end loop;
+  for item in select * from jsonb_array_elements(p_data->'habits') loop
+    old_id := item->>'id';
+    existing_id := null;
+    select id into existing_id from public.tracker_habits where user_id = owner_id and lower(name) = lower(item->>'name') limit 1;
+    if existing_id is not null and p_mode = 'skip' then
+      skipped_habits := skipped_habits + 1;
+      continue;
+    end if;
+    mapped_id := nullif(area_map->>(item->>'area_id'), '')::uuid;
+    insert into public.tracker_habits(user_id,area_id,name,description,type,tracking_type,goal_value,unit,schedule_type,schedule_config,start_date,end_date,color,icon,position,is_archived,archived_at,archived_date,time_of_day,priority,difficulty,quick_increments,minimum_goal_value,stretch_goal_value)
+      values(owner_id,mapped_id,item->>'name',item->>'description',item->>'type',item->>'tracking_type',nullif(item->>'goal_value','')::numeric,item->>'unit',item->>'schedule_type',item->'schedule_config',(item->>'start_date')::date,nullif(item->>'end_date','')::date,item->>'color',item->>'icon',coalesce((item->>'position')::integer,0),coalesce((item->>'is_archived')::boolean,false),case when coalesce((item->>'is_archived')::boolean,false) then now() else null end,nullif(item->>'archived_date','')::date,coalesce(item->>'time_of_day','ANYTIME'),coalesce(item->>'priority','NORMAL'),item->>'difficulty',case when jsonb_typeof(item->'quick_increments') = 'array' then array(select jsonb_array_elements_text(item->'quick_increments')::numeric) else null end,nullif(item->>'minimum_goal_value','')::numeric,nullif(item->>'stretch_goal_value','')::numeric)
+      returning id into new_id;
+    habit_map := jsonb_set(habit_map, array[old_id], to_jsonb(new_id::text));
+    inserted_habits := inserted_habits + 1;
+  end loop;
+  for item in select * from jsonb_array_elements(p_data->'versions') order by value->>'effective_date' loop
+    old_id := item->>'habit_id';
+    mapped_id := nullif(habit_map->>old_id,'')::uuid;
+    if mapped_id is null then continue; end if;
+    if not versioned ? old_id then
+      delete from public.tracker_habit_schedule_versions where habit_id = mapped_id and user_id = owner_id;
+      versioned := jsonb_set(versioned, array[old_id], 'true'::jsonb);
+    end if;
+    insert into public.tracker_habit_schedule_versions(habit_id,user_id,effective_date,name,area_id,type,tracking_type,goal_value,unit,schedule_type,schedule_config,start_date,end_date,is_archived,time_of_day,priority,difficulty,minimum_goal_value,stretch_goal_value)
+      values(mapped_id,owner_id,(item->>'effective_date')::date,item->>'name',nullif(area_map->>(item->>'area_id'),'')::uuid,item->>'type',item->>'tracking_type',nullif(item->>'goal_value','')::numeric,item->>'unit',item->>'schedule_type',item->'schedule_config',(item->>'start_date')::date,nullif(item->>'end_date','')::date,(item->>'is_archived')::boolean,coalesce(item->>'time_of_day','ANYTIME'),coalesce(item->>'priority','NORMAL'),item->>'difficulty',nullif(item->>'minimum_goal_value','')::numeric,nullif(item->>'stretch_goal_value','')::numeric);
+  end loop;
+  for item in select * from jsonb_array_elements(p_data->'logs') loop
+    mapped_id := nullif(habit_map->>(item->>'habit_id'),'')::uuid;
+    if mapped_id is null then continue; end if;
+    insert into public.tracker_habit_logs(habit_id,user_id,date,status,value,reason)
+      values(mapped_id,owner_id,(item->>'date')::date,item->>'status',nullif(item->>'value','')::numeric,item->>'reason');
+  end loop;
+  for item in select * from jsonb_array_elements(p_data->'notes') loop
+    mapped_id := nullif(habit_map->>(item->>'habit_id'),'')::uuid;
+    if mapped_id is null then continue; end if;
+    insert into public.tracker_habit_notes(habit_id,user_id,date,content)
+      values(mapped_id,owner_id,nullif(item->>'date','')::date,item->>'content');
+  end loop;
+  for item in select * from jsonb_array_elements(p_data->'reminders') loop
+    mapped_id := nullif(habit_map->>(item->>'habit_id'),'')::uuid;
+    if mapped_id is null then continue; end if;
+    insert into public.tracker_habit_reminders(habit_id,user_id,time,timezone,enabled)
+      values(mapped_id,owner_id,(item->>'time')::time,item->>'timezone',(item->>'enabled')::boolean);
+  end loop;
+  for item in select * from jsonb_array_elements(p_data->'pauses') loop
+    mapped_id := nullif(habit_map->>(item->>'habit_id'),'')::uuid;
+    if mapped_id is null then continue; end if;
+    insert into public.tracker_habit_pauses(habit_id,user_id,start_date,end_date,reason,note)
+      values(mapped_id,owner_id,(item->>'start_date')::date,nullif(item->>'end_date','')::date,item->>'reason',item->>'note');
+  end loop;
+  for item in select * from jsonb_array_elements(p_data->'relationships') loop
+    mapped_id := nullif(habit_map->>(item->>'source_habit_id'),'')::uuid;
+    new_id := nullif(habit_map->>(item->>'target_habit_id'),'')::uuid;
+    if mapped_id is null or new_id is null then continue; end if;
+    insert into public.tracker_habit_relationships(user_id,source_habit_id,target_habit_id,type)
+      values(owner_id,mapped_id,new_id,'AFTER');
+  end loop;
+  return jsonb_build_object('areasCreated',inserted_areas,'habitsCreated',inserted_habits,'habitsSkipped',skipped_habits);
+end $$;
+revoke all on function public.tracker_import_v2(jsonb,text) from public;
+grant execute on function public.tracker_import_v2(jsonb,text) to authenticated;

@@ -12,6 +12,7 @@ export async function withApi(request: Request, handler: (context: Context) => P
       if (request.headers.get("origin") !== new URL(request.url).origin) throw new ApiError(403, "Origin not allowed.");
     }
     const value = await handler(context);
+    if (value instanceof Response) return value;
     return Response.json(value, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     if (error instanceof ApiError) return Response.json({ error: error.message }, { status: error.status });
