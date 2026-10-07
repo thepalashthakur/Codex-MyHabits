@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateHabitStatistics, calculateStreaks, getScheduledHabits, isHabitScheduledForDate, localDate, type Habit, type HabitLog, type ScheduleVersion } from "./domain";
+import { calculateHabitStatistics, calculateStreaks, getScheduledHabits, isHabitPausedForDate, isHabitScheduledForDate, localDate, type Habit, type HabitLog, type HabitPause, type ScheduleVersion } from "./domain";
 const habit: Habit = { id: "h", user_id: "u", area_id: null, name: "Read", description: null, type: "GOOD", tracking_type: "BOOLEAN", goal_value: null, unit: null, schedule_type: "DAILY", schedule_config: {}, start_date: "2026-09-28", end_date: null, color: null, icon: null, position: 0, is_archived: false, archived_at: null };
 const log = (date: string, status: HabitLog["status"] = "COMPLETED", value: number | null = null): HabitLog => ({ id: date, habit_id: "h", user_id: "u", date, status, value });
 describe("schedule", () => {
@@ -41,4 +41,20 @@ it("preserves old schedules after an edit or archive", () => {
   ];
   expect(getScheduledHabits([current], "2026-10-02", versions)).toHaveLength(1);
   expect(getScheduledHabits([current], "2026-10-03", versions)).toHaveLength(0);
+});
+it("excludes open and bounded pauses from opportunities while preserving a streak", () => {
+  const pauses: HabitPause[] = [{ id: "p", habit_id: "h", user_id: "u", start_date: "2026-09-29", end_date: "2026-09-30", reason: "Vacation", note: null }];
+  expect(isHabitPausedForDate("h", "2026-09-30", pauses)).toBe(true);
+  expect(isHabitPausedForDate("h", "2026-10-01", pauses)).toBe(false);
+  expect(getScheduledHabits([habit], "2026-09-29", [], pauses)).toHaveLength(0);
+  expect(calculateStreaks(habit, [log("2026-09-28"), log("2026-10-01")], "2026-10-01", [], pauses)).toEqual({ current: 2, best: 2 });
+  const stats = calculateHabitStatistics(habit, [log("2026-09-28"), log("2026-10-01")], "2026-09-28", "2026-10-01", [], pauses);
+  expect(stats.opportunities).toBe(2);
+  expect(stats.paused).toBe(2);
+  expect(stats.completionRate).toBe(1);
+});
+it("does not turn a fully paused target period into a broken streak", () => {
+  const weekly = { ...habit, schedule_type: "WEEKLY_TARGET" as const, schedule_config: { target: 1 } };
+  const pauses: HabitPause[] = [{ id: "p", habit_id: "h", user_id: "u", start_date: "2026-10-05", end_date: "2026-10-11", reason: null, note: null }];
+  expect(calculateStreaks(weekly, [log("2026-09-28"), log("2026-10-12")], "2026-10-12", [], pauses).current).toBe(2);
 });
