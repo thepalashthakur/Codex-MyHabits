@@ -31,6 +31,16 @@ The REST API is under `/api/v1`: `areas`, `habits`, `logs`, `notes`, `reminders`
 - Habit detail, History, Insights, and Areas use dated schedule state. Existing V1 schedule versions are backfilled with the habit's **current** name, area, and new planning fields during migration; historical changes to those fields before V2 cannot be reconstructed. Future edits snapshot those fields on the effective local date.
 - Weekly reviews and milestones are calculated from activity. They do not create separate persistent records.
 
+## Routines
+
+Routines are reusable templates with nested groups, tasks, and references to existing habits. The implementation lives in `src/lib/routines.ts` (recurrence and progress), `src/lib/routine-data.ts` (materialization and queries), `/routines` (planning/history), `/routine-occurrences` (execution), and `/api/v1/routines` and `/api/v1/routine-occurrences` (mutations). `20261008000000_routines.sql` adds the definition, pause, occurrence, and item-snapshot tables plus user-scoped transaction functions. Apply it **after** the V2 foundations migration and before deploying this code.
+
+Routine dates use each routine's IANA timezone. A preferred start time is guidance: users can start earlier. The scheduling window closes at the end of the planned local calendar day. An unstarted occurrence becomes `MISSED`; one started with unfinished required steps becomes `PARTIAL`. Optional leaves and groups do not block completion. A monthly rule can skip nonexistent dates or run on the last day of a shorter month. Child overrides filter the parent's dates. The original `scheduled_date` is an immutable occurrence identity; rescheduling changes `planned_date`, and a future reschedule changes the planned offset without moving the recurrence anchor. Step title, instructions, and required status can be edited for this occurrence or for the template plus future unstarted occurrences.
+
+Pages materialize due occurrences lazily. The database's unique `(routine_id, scheduled_date)` key makes retries and concurrent page loads idempotent. Opening a routine's monthly History materializes past scheduled dates in that month, then a transaction function closes overdue occurrences; **no cron job is required**. Each occurrence snapshots applicable items, so editing a template does not change started or completed checklists. Future unstarted default occurrences are regenerated after template edits. Habit steps reuse `tracker_habit_logs` and associate a newly created log with its item occurrence. Undo removes only the log created by that step when it has not been changed or reused elsewhere; a changed habit check-in is preserved. The `reference_provider` and `reference_key` columns leave room for a future external task provider, but Todoist and Jira are not connected.
+
+Because generation is lazy, an old date first opened after a template edit uses the current template. Start and completion history already materialized before the edit retains its saved snapshot. Live verification still requires the shared database migration and an authenticated account.
+
 `POST /api/mcp` supports MCP JSON-RPC `initialize`, `tools/list`, and `tools/call` over HTTP with a Supabase Bearer access token. Tools include `list_habits`, `create_area`, `create_habit`, `update_habit`, and `log_habit`. Clients must obtain a token through Supabase Auth. A hosted OAuth authorization flow and ChatGPT connector registration are not included yet.
 
 ## Verification and deployment
@@ -40,6 +50,7 @@ Run `npm test`, `npm run lint`, `npm run typecheck`, and `npm run build`. Apply 
 ## Current limits
 
 - Reminder times are stored, but no notification delivery is configured.
+- V2 JSON/CSV backup currently covers habits but not routine templates or occurrence history. Keep a database backup before routine migration or deployment changes.
 - Insights aggregates paginated logs in the server process. Database-side aggregates would improve latency for accounts with years of activity.
 - Weekly and monthly target streaks use the current target for earlier periods when a target has changed. Daily, weekday, and interval history uses schedule snapshots.
 - The V2 database migration, authenticated database behavior, RLS, import round-trip, and live MCP flows require verification against the shared Supabase project with an authenticated test account.

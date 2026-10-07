@@ -2,6 +2,8 @@ import Link from "next/link";
 import { appData, logsBetween } from "@/lib/data";
 import { getPeriodTargetProgress, getScheduledHabits, logAchievesGoal, monthStart, shiftDate, weekStart, type Habit, type TimeOfDay } from "@/lib/domain";
 import { CheckIn } from "@/components/check-in";
+import { routineDefinitions, routinesForToday } from "@/lib/routine-data";
+import { effectiveStatus, localRoutineDate, progress, type ItemOccurrence } from "@/lib/routines";
 
 const groups: { id: TimeOfDay; label: string }[] = [
   { id: "MORNING", label: "Morning" }, { id: "AFTERNOON", label: "Afternoon" },
@@ -12,6 +14,14 @@ export default async function Today({ searchParams }: { searchParams: Promise<{ 
   const data = await appData();
   const requested = (await searchParams).date;
   const date = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : data.today;
+  const { error: closeError } = await data.client.rpc("tracker_close_routine_occurrences");
+  if (closeError) throw Error("Unable to update routine history.");
+  const definitions = await routineDefinitions(data.client, data.user.id);
+  const routineOccurrences = await routinesForToday(data.client, data.user.id, definitions.routines, definitions.items, data.habits, data.versions, data.pauses, definitions.pauses, date === data.today ? undefined : date);
+  const { data: routineSteps, error: routineStepsError } = routineOccurrences.length
+    ? await data.client.from("tracker_routine_item_occurrences").select("*").eq("user_id", data.user.id).in("occurrence_id", routineOccurrences.map(occurrence => occurrence.id))
+    : { data: [], error: null };
+  if (routineStepsError) throw Error("Unable to load routine progress.");
   const habits = getScheduledHabits(data.habits, date, data.versions, data.pauses);
   const logs = await logsBetween(data.user.id, data.client, weekStart(date) < monthStart(date) ? weekStart(date) : monthStart(date), date);
   const byHabit = new Map(logs.filter(log => log.date === date).map(log => [log.habit_id, log]));
@@ -27,6 +37,13 @@ export default async function Today({ searchParams }: { searchParams: Promise<{ 
     <header className="page-head today-head"><div><p className="eyebrow">YOUR DAY</p><h1>{date === data.today ? "Today" : title}</h1><p className="subtle">{title}</p></div><Link className="button primary" href="/habits/new">+ Add habit</Link></header>
     <section className="daily-summary" aria-label="Daily progress"><div className="row"><div><strong>{complete} of {habits.length} complete</strong><p className="subtle">{partial ? `${partial} in progress · ` : ""}{habits.length - complete - partial} remaining</p></div><strong className="daily-percent">{percent}%</strong></div><progress value={complete} max={habits.length || 1} aria-label={`${complete} of ${habits.length} scheduled habits completed`}/><p className="daily-rule">Only scheduled habits count. Partial, failed and skipped habits remain incomplete; paused and unscheduled habits are excluded.</p></section>
     <nav className="actions day-navigation" aria-label="Choose day"><Link className="button small" href={`/today?date=${shiftDate(date, -1)}`}>← Previous</Link>{date !== data.today && <Link className="button small" href="/today">Today</Link>}<Link className="button small" href={`/today?date=${shiftDate(date, 1)}`}>Next →</Link></nav>
+    <section className="today-group" aria-labelledby="today-routines"><div className="today-group-head"><h2 id="today-routines">Routines</h2><Link href="/routines" className="button small">Manage routines</Link></div>{routineOccurrences.length ? <div className="today-list">{routineOccurrences.map(occurrence => {
+      const routine = definitions.routines.find(item => item.id === occurrence.routine_id);
+      const steps = (routineSteps as ItemOccurrence[]).filter(item => item.occurrence_id === occurrence.id);
+      const summary = progress(steps);
+      const status = effectiveStatus(occurrence, steps, localRoutineDate(occurrence.timezone));
+      return <article className="today-habit" key={occurrence.id}><div className="today-habit-label"><span className="habit-icon" aria-hidden="true">☀</span><div><Link className="habit-title" href={`/routine-occurrences/${occurrence.id}`}>{routine?.name ?? "Routine"}</Link><div className="habit-meta">{summary.done} of {summary.total} required steps done{summary.skipped ? ` · ${summary.skipped} skipped` : ""} · {status.toLowerCase().replaceAll("_", " ")}{occurrence.planned_time ? ` · ${occurrence.planned_time.slice(0, 5)}` : ""}</div></div></div><Link className="button small" href={`/routine-occurrences/${occurrence.id}`}>{status === "SCHEDULED" ? "Start" : "Open"}</Link></article>;
+    })}</div> : <div className="card empty"><h3>No routines scheduled</h3><p>Build a routine for a repeatable part of your day.</p><Link className="button" href="/routines/new">Create routine</Link></div>}</section>
     {habits.length ? groups.map(group => {
       const items = habits.filter(habit => (habit.time_of_day ?? "ANYTIME") === group.id);
       if (!items.length) return null;

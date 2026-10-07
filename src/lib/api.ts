@@ -21,10 +21,24 @@ export async function withApi(request: Request, handler: (context: Context) => P
     return Response.json({ error: "Request failed. Please try again." }, { status: 500 });
   }
 }
-export async function jsonBody(request: Request) {
+export async function jsonBody(request: Request, maxBytes = 32768) {
   if (!request.headers.get("content-type")?.startsWith("application/json")) throw new ApiError(415, "Send JSON.");
-  if (Number(request.headers.get("content-length") ?? 0) > 32768) throw new ApiError(413, "Request too large.");
-  try { return await request.json() as unknown; } catch { throw new ApiError(400, "Invalid JSON."); }
+  if (Number(request.headers.get("content-length") ?? 0) > maxBytes) throw new ApiError(413, "Request too large.");
+  const reader = request.body?.getReader();
+  if (!reader) throw new ApiError(400, "Send JSON.");
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) { await reader.cancel(); throw new ApiError(413, "Request too large."); }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  try { return JSON.parse(new TextDecoder().decode(bytes)) as unknown; } catch { throw new ApiError(400, "Invalid JSON."); }
 }
 export async function owned(context: Context, table: "tracker_habits" | "tracker_areas" | "tracker_habit_notes" | "tracker_habit_reminders", id: string) {
   const { data, error } = await context.client.from(table).select("id").eq("id", id).eq("user_id", context.user.id).maybeSingle();
