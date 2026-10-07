@@ -16,6 +16,44 @@ alter table public.tracker_habits
 
 alter table public.tracker_habit_logs add column reason text check (reason is null or length(reason) <= 120);
 
+-- New edits keep planning context as it stood on the effective date.
+alter table public.tracker_habit_schedule_versions
+  add column name text,
+  add column area_id uuid,
+  add column time_of_day text not null default 'ANYTIME',
+  add column priority text not null default 'NORMAL',
+  add column difficulty text,
+  add column minimum_goal_value numeric(12,3),
+  add column stretch_goal_value numeric(12,3);
+update public.tracker_habit_schedule_versions v set
+  name = h.name, area_id = h.area_id, time_of_day = h.time_of_day,
+  priority = h.priority, difficulty = h.difficulty,
+  minimum_goal_value = h.minimum_goal_value, stretch_goal_value = h.stretch_goal_value
+from public.tracker_habits h where v.habit_id = h.id;
+
+create or replace function public.tracker_record_habit_schedule_version() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare local_today date;
+begin
+  if tg_op = 'UPDATE' then
+    if row(new.name, new.area_id, new.type, new.tracking_type, new.goal_value, new.unit, new.schedule_type, new.schedule_config, new.start_date, new.end_date, new.is_archived, new.time_of_day, new.priority, new.difficulty, new.minimum_goal_value, new.stretch_goal_value)
+      is not distinct from row(old.name, old.area_id, old.type, old.tracking_type, old.goal_value, old.unit, old.schedule_type, old.schedule_config, old.start_date, old.end_date, old.is_archived, old.time_of_day, old.priority, old.difficulty, old.minimum_goal_value, old.stretch_goal_value) then
+      return new;
+    end if;
+  end if;
+  select (now() at time zone coalesce((select timezone from public.tracker_profiles where user_id = new.user_id), 'UTC'))::date into local_today;
+  insert into public.tracker_habit_schedule_versions(habit_id, user_id, effective_date, name, area_id, type, tracking_type, goal_value, unit, schedule_type, schedule_config, start_date, end_date, is_archived, time_of_day, priority, difficulty, minimum_goal_value, stretch_goal_value)
+  values (new.id, new.user_id, case when tg_op = 'INSERT' then new.start_date else local_today end, new.name, new.area_id, new.type, new.tracking_type, new.goal_value, new.unit, new.schedule_type, new.schedule_config, new.start_date, new.end_date, new.is_archived, new.time_of_day, new.priority, new.difficulty, new.minimum_goal_value, new.stretch_goal_value)
+  on conflict (habit_id, effective_date) do update set
+    name=excluded.name, area_id=excluded.area_id, type=excluded.type,
+    tracking_type=excluded.tracking_type, goal_value=excluded.goal_value, unit=excluded.unit,
+    schedule_type=excluded.schedule_type, schedule_config=excluded.schedule_config,
+    start_date=excluded.start_date, end_date=excluded.end_date, is_archived=excluded.is_archived,
+    time_of_day=excluded.time_of_day, priority=excluded.priority, difficulty=excluded.difficulty,
+    minimum_goal_value=excluded.minimum_goal_value, stretch_goal_value=excluded.stretch_goal_value;
+  return new;
+end $$;
+
 create extension if not exists btree_gist;
 create table public.tracker_habit_pauses (
   id uuid primary key default gen_random_uuid(),
@@ -76,3 +114,27 @@ begin
 end $$;
 create trigger tracker_relationship_cycle before insert on public.tracker_habit_relationships
 for each row execute function public.tracker_prevent_relationship_cycle();
+
+create function public.tracker_reorder_habits(p_ids uuid[]) returns void
+language plpgsql security definer set search_path = public as $$
+declare owner_id uuid := auth.uid(); group_name text; provided_count integer;
+begin
+  provided_count := cardinality(p_ids);
+  if owner_id is null or provided_count < 1 or provided_count > 500 then
+    raise exception 'Invalid habit order' using errcode = '22023';
+  end if;
+  select time_of_day into group_name from public.tracker_habits
+    where id = p_ids[1] and user_id = owner_id and not is_archived;
+  if group_name is null
+     or (select count(distinct selected.id) from unnest(p_ids) as selected(id)) <> provided_count
+     or (select count(*) from public.tracker_habits where user_id = owner_id and not is_archived and time_of_day = group_name) <> provided_count
+     or (select count(*) from public.tracker_habits where user_id = owner_id and not is_archived and time_of_day = group_name and id = any(p_ids)) <> provided_count then
+    raise exception 'Habit order must include exactly one active time-of-day group' using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtext(owner_id::text || group_name));
+  update public.tracker_habits h set position = ordered.ordinality::integer - 1, updated_at = now()
+  from unnest(p_ids) with ordinality as ordered(id, ordinality)
+  where h.id = ordered.id and h.user_id = owner_id;
+end $$;
+revoke all on function public.tracker_reorder_habits(uuid[]) from public;
+grant execute on function public.tracker_reorder_habits(uuid[]) to authenticated;

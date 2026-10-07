@@ -62,6 +62,18 @@ button { cursor: pointer; }
 .heatmap-failed { color: var(--danger); }
 .heatmap-paused { border-style: dashed; color: var(--muted); }
 .heatmap-not-scheduled { color: var(--muted); opacity: .65; }
+.habit-filters { display: grid; gap: 10px; margin-bottom: 24px; }
+.habit-filter-main { display: flex; align-items: center; gap: 10px; }
+.habit-filters summary { display: inline-flex; align-items: center; min-height: 40px; color: var(--accent); cursor: pointer; font-weight: 600; }
+.habit-filter-extra { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; padding: 8px 0; }
+.habit-list { border-top: 1px solid var(--line); }
+.habit-list-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 64px; border-bottom: 1px solid var(--line); }
+.habit-list-link { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; padding: 8px 0; }
+.habit-list-link > span:last-child { min-width: 0; }
+.habit-list-link strong, .habit-list-link small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.habit-list-link small { margin-top: 3px; color: var(--muted); }
+.reorder-actions { display: flex; align-items: center; }
+.reorder-actions .MuiIconButton-root { min-width: 36px; min-height: 36px; }
 
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 9px 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-weight: 600; }
 .button:hover { background: var(--interactive-hover); }
@@ -114,6 +126,10 @@ html[data-theme="dark"] .button.primary { color: #101a29; }
   .today-habit { align-items: flex-start; flex-direction: column; }
   .today-habit .actions { justify-content: flex-start; padding-left: 0; }
   .today-habit .habit-icon { width: 36px; height: 36px; }
+  .habit-filter-main { flex-wrap: wrap; }
+  .habit-filter-main .MuiFormControl-root:first-child { flex-basis: 100%; }
+  .habit-filter-main .MuiButton-root { flex: 1; }
+  .reorder-actions .MuiIconButton-root { min-width: 44px; min-height: 44px; }
   .calendar .day { min-height: 54px; padding: 5px; }
   .calendar .day small { font-size: 10px; }
   .table { display: block; overflow-x: auto; }
