@@ -20,6 +20,7 @@ export function HabitPauses({ habitId, today, pauses }: { habitId: string; today
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [reason, setReason] = useState("");
   const active = pauses.find(pause => pause.start_date <= today && (!pause.end_date || pause.end_date >= today));
 
   async function save(event: React.SubmitEvent<HTMLFormElement>) {
@@ -27,10 +28,11 @@ export function HabitPauses({ habitId, today, pauses }: { habitId: string; today
     const form = new FormData(event.currentTarget);
     setBusy(true); setError("");
     try {
-      const response = await fetch(`/api/v1/habits/${habitId}/pauses`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ start_date: form.get("start_date"), end_date: form.get("end_date") || null, reason: form.get("reason") || null, note: form.get("note") || null }) });
+      const selectedReason = reason === "Custom" ? String(form.get("custom_reason") ?? "").trim() : reason;
+      const response = await fetch(`/api/v1/habits/${habitId}/pauses`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ start_date: form.get("start_date"), end_date: form.get("end_date") || null, reason: selectedReason || null, note: form.get("note") || null }) });
       const body = await response.json();
       if (!response.ok) throw Error(body.error);
-      setOpen(false); router.refresh();
+      setOpen(false); setReason(""); router.refresh();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not pause habit."); }
     finally { setBusy(false); }
   }
@@ -51,6 +53,6 @@ export function HabitPauses({ habitId, today, pauses }: { habitId: string; today
     {active && <p className="subtle">Paused since {active.start_date}{active.reason ? ` · ${active.reason}` : ""}. Paused days do not count as missed.</p>}
     {pauses.length > 0 && <details><summary>Pause history ({pauses.length})</summary><div className="list">{pauses.map(pause => <p className="subtle" key={pause.id}>{pause.start_date} – {pause.end_date || "ongoing"}{pause.reason ? ` · ${pause.reason}` : ""}</p>)}</div></details>}
     {error && <Alert severity="error" role="alert" sx={{ mt: 1 }}>{error}</Alert>}
-    <Dialog open={open} onClose={() => !busy && setOpen(false)} aria-labelledby="pause-title"><form onSubmit={save}><DialogTitle id="pause-title">Pause habit</DialogTitle><DialogContent><Stack spacing={2} sx={{ pt: 1 }}><p className="subtle">Paused dates are excluded from your schedule and streak calculations.</p><TextField label="Start date" name="start_date" type="date" required defaultValue={today} slotProps={{ inputLabel: { shrink: true } }}/><TextField label="End date (optional)" name="end_date" type="date" slotProps={{ inputLabel: { shrink: true } }}/><TextField select label="Reason (optional)" name="reason" defaultValue="">{reasons.map(reason => <MenuItem key={reason} value={reason}>{reason || "No reason"}</MenuItem>)}</TextField><TextField label="Note (optional)" name="note" multiline minRows={2} slotProps={{ htmlInput: { maxLength: 500 } }}/></Stack></DialogContent><DialogActions><Button onClick={() => setOpen(false)} disabled={busy}>Cancel</Button><Button type="submit" variant="contained" disabled={busy}>{busy ? "Saving…" : "Pause"}</Button></DialogActions></form></Dialog>
+    <Dialog open={open} onClose={() => !busy && setOpen(false)} aria-labelledby="pause-title"><form onSubmit={save}><DialogTitle id="pause-title">Pause habit</DialogTitle><DialogContent><Stack spacing={2} sx={{ pt: 1 }}><p className="subtle">Paused dates are excluded from your schedule and streak calculations.</p><TextField label="Start date" name="start_date" type="date" required defaultValue={today} slotProps={{ inputLabel: { shrink: true } }}/><TextField label="End date (optional)" name="end_date" type="date" slotProps={{ inputLabel: { shrink: true } }}/><TextField select label="Reason (optional)" value={reason} onChange={event => setReason(event.target.value)}>{reasons.map(option => <MenuItem key={option} value={option}>{option || "No reason"}</MenuItem>)}</TextField>{reason === "Custom" && <TextField label="Custom reason" name="custom_reason" required autoFocus slotProps={{ htmlInput: { maxLength: 80 } }}/>}<TextField label="Note (optional)" name="note" multiline minRows={2} slotProps={{ htmlInput: { maxLength: 500 } }}/></Stack></DialogContent><DialogActions><Button onClick={() => setOpen(false)} disabled={busy}>Cancel</Button><Button type="submit" variant="contained" disabled={busy}>{busy ? "Saving…" : "Pause"}</Button></DialogActions></form></Dialog>
   </>;
 }

@@ -19,7 +19,9 @@ const tableName = (name: TableName) => `tracker_${name === "logs" ? "habit_logs"
 async function tableRows(context: Context, name: TableName) {
   const rows: Record<string, unknown>[] = [];
   for (let offset = 0; ; offset += 1000) {
-    const { data, error } = await context.client.from(tableName(name)).select("*").eq("user_id", context.user.id).range(offset, offset + 999);
+    const base = context.client.from(tableName(name)).select("*").eq("user_id", context.user.id);
+    const query = name === "versions" ? base.order("habit_id").order("effective_date") : base.order("id");
+    const { data, error } = await query.range(offset, offset + 999);
     if (error) throw error;
     rows.push(...(data ?? []).map(row => Object.fromEntries(tableColumns[name].map(column => [column, row[column]]))));
     if (!data || data.length < 1000) break;

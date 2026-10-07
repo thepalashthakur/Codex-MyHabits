@@ -96,12 +96,14 @@ export function getWeeklyReviewSummary(data: InsightData, today: string) {
   const from = shiftDate(today, -6);
   const comparison = getPeriodComparison(data, from, today);
   const performance = getHabitPerformance(data, from, today);
+  const previousPerformance = new Map(getHabitPerformance(data, comparison.previousFrom, comparison.previousTo).map(row => [row.habit.id, row]));
+  const improved = performance.map(row => ({ row, previous: previousPerformance.get(row.habit.id) })).filter(item => item.previous && item.row.opportunities >= 3 && item.previous.opportunities >= 3).sort((a, b) => (b.row.completionRate - b.previous!.completionRate) - (a.row.completionRate - a.previous!.completionRate))[0];
   const ranking = getHabitRankings(data, from, today);
   return {
     from, to: today, ...comparison,
     completed: performance.reduce((sum, row) => sum + row.completed, 0),
     skipped: performance.reduce((sum, row) => sum + row.skipped, 0),
     missed: performance.reduce((sum, row) => sum + row.missed, 0),
-    best: ranking.strongest[0], needsAttention: ranking.needsAttention[0],
+    best: ranking.strongest[0], needsAttention: ranking.needsAttention[0], improved: improved && improved.row.completionRate > improved.previous!.completionRate ? { habit: improved.row.habit, change: improved.row.completionRate - improved.previous!.completionRate } : null,
   };
 }

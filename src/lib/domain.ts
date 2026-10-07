@@ -51,15 +51,23 @@ export function logAchievesGoal(habit: Habit, log?: HabitLog) {
 export type HabitDayState = "COMPLETED" | "PARTIAL" | "FAILED" | "SKIPPED" | "PAUSED" | "PENDING" | "MISSED" | "NOT_SCHEDULED";
 export function getHabitStateForDate(habit: Habit, date: string, today: string, log?: HabitLog, versions: ScheduleVersion[] = [], pauses: HabitPause[] = []): HabitDayState {
   const datedHabit = habitOnDate(habit, versions, date);
+  if (!isHabitScheduledForDate(datedHabit, date)) return "NOT_SCHEDULED";
   if (isHabitPausedForDate(habit.id, date, pauses)) return "PAUSED";
-  if (!isHabitScheduledForDate(datedHabit, date, pauses)) return "NOT_SCHEDULED";
   if (log?.status === "FAILED") return "FAILED";
   if (log?.status === "SKIPPED") return "SKIPPED";
   if (logAchievesGoal(datedHabit, log)) return "COMPLETED";
   if (log?.status === "COMPLETED") return "PARTIAL";
+  if (datedHabit.schedule_type === "WEEKLY_TARGET" || datedHabit.schedule_type === "MONTHLY_TARGET") return "PENDING";
   return date < today ? "MISSED" : "PENDING";
 }
 export function periodKey(date: string, type: ScheduleType) { return type === "WEEKLY_TARGET" ? weekStart(date) : monthStart(date); }
+export function getPeriodTargetProgress(habit: Habit, logs: HabitLog[], date: string, versions: ScheduleVersion[] = [], pauses: HabitPause[] = []) {
+  if (habit.schedule_type !== "WEEKLY_TARGET" && habit.schedule_type !== "MONTHLY_TARGET") return null;
+  const start = periodKey(date, habit.schedule_type);
+  const count = logs.filter(log => log.habit_id === habit.id && log.date >= start && log.date <= date && isHabitScheduledForDate(habitOnDate(habit, versions, log.date), log.date, pauses) && logAchievesGoal(habitOnDate(habit, versions, log.date), log)).length;
+  const target = habit.schedule_config.target ?? 1;
+  return { count, target, achieved: count >= target };
+}
 function periodEnd(key: string, type: ScheduleType) {
   return type === "WEEKLY_TARGET" ? shiftDate(key, 6) : shiftDate(`${key.slice(0, 7)}-${String(new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)), 0)).getUTCDate()).padStart(2, "0")}`, 0);
 }

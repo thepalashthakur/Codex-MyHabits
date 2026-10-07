@@ -4,5 +4,5 @@ export function prepareLog(habit: Habit, date: string, status: HabitLog["status"
   if (status === null) return null;
   if (!isHabitScheduledForDate(habit, date, pauses)) throw new LogRuleError("Habit is not scheduled for this date.");
   if (habit.tracking_type === "MEASURABLE" && status === "COMPLETED" && value == null) throw new LogRuleError("A value is required.");
-  return { status, value: status === "COMPLETED" ? (value ?? null) : null, ...(reason ? { reason } : {}) };
+  return { status, value: status === "COMPLETED" ? (value ?? null) : null, reason: status === "SKIPPED" ? reason ?? null : null };
 }

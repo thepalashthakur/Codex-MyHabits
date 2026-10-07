@@ -146,12 +146,15 @@ declare
   area_map jsonb := '{}'::jsonb; habit_map jsonb := '{}'::jsonb; versioned jsonb := '{}'::jsonb;
   existing_id uuid; inserted_habits integer := 0; skipped_habits integer := 0; inserted_areas integer := 0;
 begin
-  if owner_id is null or p_mode not in ('skip', 'copy') or p_data->>'format' <> 'myhabits-v2' or p_data->>'version' <> '2'
-     or jsonb_typeof(p_data->'areas') <> 'array' or jsonb_typeof(p_data->'habits') <> 'array'
-     or jsonb_typeof(p_data->'logs') <> 'array' or jsonb_typeof(p_data->'notes') <> 'array'
-     or jsonb_typeof(p_data->'reminders') <> 'array' or jsonb_typeof(p_data->'pauses') <> 'array'
-     or jsonb_typeof(p_data->'relationships') <> 'array' or jsonb_typeof(p_data->'versions') <> 'array'
-     or jsonb_array_length(p_data->'habits') > 5000 or jsonb_array_length(p_data->'logs') > 100000 then
+  if owner_id is null or p_mode is null or p_mode not in ('skip', 'copy') or p_data->>'format' is distinct from 'myhabits-v2' or p_data->>'version' is distinct from '2'
+     or jsonb_typeof(p_data->'areas') is distinct from 'array' or jsonb_typeof(p_data->'habits') is distinct from 'array'
+     or jsonb_typeof(p_data->'logs') is distinct from 'array' or jsonb_typeof(p_data->'notes') is distinct from 'array'
+     or jsonb_typeof(p_data->'reminders') is distinct from 'array' or jsonb_typeof(p_data->'pauses') is distinct from 'array'
+     or jsonb_typeof(p_data->'relationships') is distinct from 'array' or jsonb_typeof(p_data->'versions') is distinct from 'array'
+     or jsonb_array_length(p_data->'areas') > 1000 or jsonb_array_length(p_data->'habits') > 5000
+     or jsonb_array_length(p_data->'logs') > 100000 or jsonb_array_length(p_data->'notes') > 50000
+     or jsonb_array_length(p_data->'reminders') > 5000 or jsonb_array_length(p_data->'pauses') > 10000
+     or jsonb_array_length(p_data->'relationships') > 10000 or jsonb_array_length(p_data->'versions') > 50000 then
     raise exception 'Invalid MyHabits import' using errcode = '22023';
   end if;
   perform pg_advisory_xact_lock(hashtext(owner_id::text));

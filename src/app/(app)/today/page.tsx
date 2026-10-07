@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { appData, logsBetween } from "@/lib/data";
-import { getScheduledHabits, logAchievesGoal, shiftDate, type TimeOfDay } from "@/lib/domain";
+import { getPeriodTargetProgress, getScheduledHabits, logAchievesGoal, monthStart, shiftDate, weekStart, type Habit, type TimeOfDay } from "@/lib/domain";
 import { CheckIn } from "@/components/check-in";
 
 const groups: { id: TimeOfDay; label: string }[] = [
@@ -13,10 +13,13 @@ export default async function Today({ searchParams }: { searchParams: Promise<{ 
   const requested = (await searchParams).date;
   const date = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : data.today;
   const habits = getScheduledHabits(data.habits, date, data.versions, data.pauses);
-  const logs = await logsBetween(data.user.id, data.client, date, date);
-  const byHabit = new Map(logs.map(log => [log.habit_id, log]));
-  const complete = habits.filter(habit => logAchievesGoal(habit, byHabit.get(habit.id))).length;
-  const partial = habits.filter(habit => { const log = byHabit.get(habit.id); return log?.status === "COMPLETED" && !logAchievesGoal(habit, log); }).length;
+  const logs = await logsBetween(data.user.id, data.client, weekStart(date) < monthStart(date) ? weekStart(date) : monthStart(date), date);
+  const byHabit = new Map(logs.filter(log => log.date === date).map(log => [log.habit_id, log]));
+  const periodProgress = (habit: Habit) => getPeriodTargetProgress(habit, logs, date, data.versions, data.pauses);
+  const achieved = (habit: Habit) => periodProgress(habit)?.achieved ?? logAchievesGoal(habit, byHabit.get(habit.id));
+  const inProgress = (habit: Habit) => { const log = byHabit.get(habit.id); const progress = periodProgress(habit); return progress ? progress.count > 0 && !progress.achieved : log?.status === "COMPLETED" && !achieved(habit); };
+  const complete = habits.filter(achieved).length;
+  const partial = habits.filter(inProgress).length;
   const percent = habits.length ? Math.round(complete / habits.length * 100) : 0;
   const title = new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
 
@@ -27,11 +30,14 @@ export default async function Today({ searchParams }: { searchParams: Promise<{ 
     {habits.length ? groups.map(group => {
       const items = habits.filter(habit => (habit.time_of_day ?? "ANYTIME") === group.id);
       if (!items.length) return null;
-      const done = items.filter(habit => logAchievesGoal(habit, byHabit.get(habit.id))).length;
+      const done = items.filter(achieved).length;
       return <section className="today-group" key={group.id} aria-labelledby={`group-${group.id}`}><div className="today-group-head"><h2 id={`group-${group.id}`}>{group.label}</h2><span>{done}/{items.length}</span></div><div className="today-list">{items.map(habit => {
         const log = byHabit.get(habit.id);
-        const status = logAchievesGoal(habit, log) ? "Complete" : log?.status === "COMPLETED" ? "In progress" : log?.status === "FAILED" ? "Failed" : log?.status === "SKIPPED" ? "Skipped" : "Remaining";
-        return <article className="today-habit" key={habit.id}><div className="today-habit-label"><span className="habit-icon" aria-hidden="true">{habit.icon || "✓"}</span><div><Link className="habit-title" href={`/habits/${habit.id}`}>{habit.name}</Link><div className="habit-meta">{status}{habit.tracking_type === "MEASURABLE" ? ` · ${Number(log?.value ?? 0)} / ${habit.goal_value} ${habit.unit}` : ""}</div></div></div><CheckIn habit={habit} date={date} initial={log}/></article>;
+        const status = achieved(habit) ? "Complete" : inProgress(habit) ? "In progress" : log?.status === "FAILED" ? "Failed" : log?.status === "SKIPPED" ? "Skipped" : "Remaining";
+        const progress = periodProgress(habit);
+        const period = progress ? ` · ${progress.count}/${progress.target} this ${habit.schedule_type === "WEEKLY_TARGET" ? "week" : "month"}` : "";
+        const measured = habit.tracking_type === "MEASURABLE" ? ` · ${Number(log?.value ?? 0)} / ${habit.goal_value} ${habit.unit}` : "";
+        return <article className="today-habit" key={habit.id}><div className="today-habit-label"><span className="habit-icon" aria-hidden="true">{habit.icon || "✓"}</span><div><Link className="habit-title" href={`/habits/${habit.id}`}>{habit.name}</Link><div className="habit-meta">{status}{period}{measured}{habit.minimum_goal_value ? ` · minimum ${habit.minimum_goal_value}` : ""}{habit.stretch_goal_value ? ` · stretch ${habit.stretch_goal_value}` : ""}</div></div></div><CheckIn habit={habit} date={date} initial={log}/></article>;
       })}</div></section>;
     }) : <div className="card empty"><h2>Nothing scheduled today</h2><p>Enjoy the open day, or add a habit when you’re ready.</p><Link className="button primary" href="/habits/new">Create habit</Link></div>}
   </>;
