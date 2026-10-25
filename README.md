@@ -6,15 +6,14 @@ A Next.js habit tracker with Supabase Auth and PostgreSQL, user scoped REST endp
 
 - `src/app/(app)` contains the authenticated screens: Today, Habits, Areas, History, Insights, and Settings. `/analytics` redirects to Insights.
 - `src/lib/domain.ts` contains dated schedule, pause, goal-tier, streak, and statistics functions. `src/lib/insights.ts` builds period comparisons, rankings, and weekly reviews. Server components query Supabase through `src/lib/data.ts`; interactive controls call HTTP route handlers.
-- `src/lib/auth.ts` wraps Supabase Auth. It follows the same email/password and server cookie pattern as the supplied `UseAuth` reference repo, deployed at `https://use-auth-rosy.vercel.app`. MyHabits must use **the same Supabase project** so existing UseAuth accounts can sign in here. The UseAuth hosted cookie cannot be shared across these domains; users sign in on MyHabits to establish its own secure session. No second identity provider or service role key is used. Bearer requests use the same Supabase user identity.
+- `src/app/api/auth/[action]` forwards sign-in and sign-up from the MyHabits server to UseAuth. MyHabits verifies the returned Supabase session against its own configured project and stores it in host-only, HttpOnly cookies. It must use **the same Supabase project** as UseAuth. Users still sign in on MyHabits because hosted cookies are not shared between domains. Logout and session refresh use the shared Supabase issuer locally. This is a compatibility bridge, not OAuth single sign-on. Bearer requests use the same Supabase user identity.
 - `supabase/migrations/20261007000000_myhabits.sql` is the single complete schema file. It installs missing phases for habits, schedule history, V2 planning, and routines in one transaction while retaining existing tracker rows. History uses the version effective on the viewed date. A skip preserves a streak without increasing it; pauses are excluded from scheduled opportunities. Weekly and monthly target streaks count successful periods.
 
 ## Setup
 
 1. Use the same Supabase project as UseAuth. Run the entire `supabase/migrations/20261007000000_myhabits.sql` file once in Supabase SQL Editor. It can also upgrade an existing MyHabits V1/V2 schema and be rerun safely. The tracker tables all start with `tracker_`; the existing `profiles`, `areas`, `habits`, and `habit_logs` tables belong to another schema and must be left alone.
-2. Copy `.env.example` to `.env.local` and set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` to the **same project values** used by UseAuth, plus `APP_URL` (for example, `http://localhost:3000`). These are server environment variables; do not prefix the key with `NEXT_PUBLIC_`.
-3. In Supabase Auth, enable email/password and allow your app URL and `/auth/confirm` as a redirect. This app uses Supabase Auth email confirmation when enabled.
-4. Use Node.js 24, run `npm install` and `npm run dev`. Existing UseAuth users can sign in at `/sign-in`; new users can use `/sign-up` after adding `https://myhabits-dun.vercel.app/auth/confirm` to the shared Supabase Auth redirect URLs.
+2. Copy `.env.example` to `.env.local` and set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` to the **same project values** used by UseAuth, plus `USEAUTH_URL` as its exact HTTPS origin and `APP_URL` (for example, `http://localhost:3000`). These are server environment variables; do not prefix the key with `NEXT_PUBLIC_`.
+3. Use Node.js 24, run `npm install` and `npm run dev`. Existing UseAuth users can sign in at `/sign-in`. New users can use `/sign-up`; confirmation links open UseAuth, after which they return to MyHabits to sign in with the same email and password. The sign-in and post-registration screens can resend confirmation. Password recovery opens the hosted UseAuth form, and Settings links to UseAuth for password changes.
 
 All `tracker_*` tables, including V2 pauses and relationships, have RLS. Queries and mutations also filter by the authenticated `user_id`. The client never supplies an authoritative user ID. Deleting an area sets its habits' `area_id` to null. Deleting a habit cascades to its activity and relationships.
 
@@ -45,7 +44,7 @@ Because generation is lazy, an old date first opened after a template edit uses 
 
 ## Verification and deployment
 
-Run `npm test`, `npm run lint`, `npm run typecheck`, and `npm run build`. Apply the single schema file to the shared Supabase project **before** deploying the V2 application; the new UI and API expect its columns and tables. The Vercel project `myhabits` is linked and its first production deployment is at `https://myhabits-dun.vercel.app` with deployment protection. `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` are configured in Vercel; `APP_URL` is set for production. Add `/auth/confirm` to the shared Supabase Auth redirect URLs. No background process is required.
+Run `npm test`, `npm run lint`, `npm run typecheck`, and `npm run build`. Apply the single schema file to the shared Supabase project **before** deploying the V2 application; the new UI and API expect its columns and tables. The Vercel project `myhabits` serves `https://myhabits-dun.vercel.app`. Configure `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `APP_URL`, and `USEAUTH_URL` for production. UseAuth owns the confirmation and recovery redirect URLs. No background process is required.
 
 ## Current limits
 

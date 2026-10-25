@@ -1,4 +1,5 @@
 import { AuthForm } from "@/components/auth-form";
 import { isConfigured } from "@/lib/supabase";
+import { isUseAuthConfigured } from "@/lib/useauth";
 export const dynamic = "force-dynamic";
-export default function SignUp() { return <AuthForm mode="sign-up" configured={isConfigured()}/>; }
+export default function SignUp() { return <AuthForm mode="sign-up" configured={isConfigured() && isUseAuthConfigured()}/>; }
