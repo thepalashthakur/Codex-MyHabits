@@ -34,6 +34,11 @@ button { cursor: pointer; }
 .habit-title { font-weight: 600; overflow-wrap: anywhere; }
 .habit-meta { margin-top: 3px; color: var(--muted); font-size: 12px; }
 .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.habit-timer-summary { display: flex; flex-wrap: wrap; gap: 32px; margin-bottom: 18px; }
+.habit-timer-summary > div { display: flex; flex-direction: column; gap: 4px; }
+.habit-timer-summary strong { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.habit-timer-summary .habit-timer-clock { font-size: 2rem; }
+.habit-timer h3 { margin: 24px 0 12px; font-size: 1rem; }
 .progress { height: 7px; margin-top: 16px; overflow: hidden; border-radius: 999px; background: var(--subtle); }
 .progress span { display: block; height: 100%; background: var(--accent); }
 .pill { display: inline-flex; align-items: center; min-height: 26px; padding: 4px 9px; border-radius: 7px; background: var(--subtle); color: var(--ink); font-size: 12px; font-weight: 600; }
