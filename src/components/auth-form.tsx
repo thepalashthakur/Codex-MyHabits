@@ -7,10 +7,10 @@ import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
 import TextField from "@mui/material/TextField";
 
-export function AuthForm({ mode, configured, recoveryUrl }: { mode: "sign-in" | "sign-up"; configured: boolean; recoveryUrl?: string }) {
+export function AuthForm({ mode, configured, recoveryUrl, ssoEnabled = false, ssoFailed = false }: { mode: "sign-in" | "sign-up"; configured: boolean; recoveryUrl?: string; ssoEnabled?: boolean; ssoFailed?: boolean }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(ssoFailed ? "Shared sign-in could not be completed. Try again or use your password." : "");
   const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(false);
   const [confirmation, setConfirmation] = useState(false);
@@ -61,6 +61,7 @@ export function AuthForm({ mode, configured, recoveryUrl }: { mode: "sign-in" | 
     {!configured && <p className="form-error" role="status">Connect Supabase and UseAuth using the variables in .env.example to enable accounts.</p>}
     {error && <p role="alert" className="form-error">{error}</p>}
     {notice && <p role="status">{notice}</p>}
+    {mode === "sign-in" && ssoEnabled && !confirmation && <p><a href="/auth/sso/start">Continue with shared account</a></p>}
     {!confirmation && <form className="form" onSubmit={submit}>
       <TextField label="Email" name="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required fullWidth />
       <TextField label="Password" name="password" type="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} slotProps={{ htmlInput: { minLength: mode === "sign-up" ? 8 : 1 } }} required fullWidth />

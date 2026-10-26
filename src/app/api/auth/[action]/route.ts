@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { cookieClient, isConfigured } from "@/lib/supabase";
 import { hasMyHabitsAccess, isUseAuthConfigured, requestUseAuth } from "@/lib/useauth";
+import { cookieOptions, sessionCookie } from "@/lib/sso";
 export const dynamic = "force-dynamic";
 const credentials = z.object({ email: z.email().max(254), password: z.string().min(1).max(128) });
 const emailOnly = credentials.pick({ email: true });
@@ -14,7 +15,7 @@ export async function POST(request: Request, { params }: Context) {
   if (origin !== new URL(request.url).origin || request.headers.get("sec-fetch-site") === "cross-site") return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   let body: unknown;
   try { if (Number(request.headers.get("content-length") ?? 0) > 16384) throw Error(); body = await request.json(); } catch { return NextResponse.json({ error: "Invalid request" }, { status: 400 }); }
-  if (action === "sign-out") { const client = await cookieClient(); await client.auth.signOut({ scope: "local" }); return NextResponse.json({ ok: true }); }
+  if (action === "sign-out") { const client = await cookieClient(); await client.auth.signOut({ scope: "local" }); const response = NextResponse.json({ ok: true }); response.cookies.set(sessionCookie, "", cookieOptions(0)); return response; }
   if (action === "resend-confirmation") {
     const parsed = emailOnly.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
