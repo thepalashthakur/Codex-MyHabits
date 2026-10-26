@@ -1,4 +1,5 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type UseAuthSession = {
   access_token: string;
@@ -32,6 +33,11 @@ export function getUseAuthOrigin() {
 
 export function isUseAuthConfigured() {
   try { getUseAuthOrigin(); return true; } catch { return false; }
+}
+
+export async function hasMyHabitsAccess(client: SupabaseClient) {
+  const { data, error } = await client.rpc("has_app_access", { app_key: "myhabits" });
+  return !error && data === true;
 }
 
 export async function requestUseAuth(action: "sign-in" | "sign-up", body: { email: string; password: string }): Promise<{ status: number; data: UseAuthResponse }>;

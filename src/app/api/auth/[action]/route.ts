@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { cookieClient, isConfigured } from "@/lib/supabase";
-import { isUseAuthConfigured, requestUseAuth } from "@/lib/useauth";
+import { hasMyHabitsAccess, isUseAuthConfigured, requestUseAuth } from "@/lib/useauth";
 export const dynamic = "force-dynamic";
 const credentials = z.object({ email: z.email().max(254), password: z.string().min(1).max(128) });
 const emailOnly = credentials.pick({ email: true });
@@ -45,6 +45,10 @@ export async function POST(request: Request, { params }: Context) {
     if (local.error || !local.data.user || local.data.user.id !== result.data.user.id) {
       await client.auth.signOut({ scope: "local" });
       return NextResponse.json({ error: "UseAuth and MyHabits are not connected to the same Supabase project." }, { status: 503 });
+    }
+    if (!await hasMyHabitsAccess(client)) {
+      await client.auth.signOut({ scope: "local" });
+      return NextResponse.json({ error: "Access to MyHabits is not enabled for this account." }, { status: 403 });
     }
     return NextResponse.json({ ok: true, confirmationRequired: false });
   } catch {

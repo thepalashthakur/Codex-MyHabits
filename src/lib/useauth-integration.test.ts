@@ -2,15 +2,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   auth: { setSession: vi.fn(), signOut: vi.fn() },
+  rpc: vi.fn(),
   requestUseAuth: vi.fn(),
 }));
 vi.mock("@/lib/supabase", () => ({
-  cookieClient: vi.fn(async () => ({ auth: mocks.auth })),
+  cookieClient: vi.fn(async () => ({ auth: mocks.auth, rpc: mocks.rpc })),
   isConfigured: vi.fn(() => true),
 }));
 vi.mock("@/lib/useauth", () => ({
   isUseAuthConfigured: vi.fn(() => true),
   requestUseAuth: mocks.requestUseAuth,
+  hasMyHabitsAccess: vi.fn(async (client) => {
+    const { data, error } = await client.rpc("has_app_access", { app_key: "myhabits" });
+    return !error && data === true;
+  }),
 }));
 
 import { POST } from "../app/api/auth/[action]/route";
@@ -26,6 +31,7 @@ function request(action: string, origin = "https://myhabits.example.com") {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.signOut.mockResolvedValue({ error: null });
+  mocks.rpc.mockResolvedValue({ data: true, error: null });
 });
 
 describe("MyHabits UseAuth integration", () => {
@@ -36,6 +42,7 @@ describe("MyHabits UseAuth integration", () => {
     expect(response.status).toBe(200);
     expect(mocks.requestUseAuth).toHaveBeenCalledWith("sign-in", { email: "test@example.com", password: "long-password" });
     expect(mocks.auth.setSession).toHaveBeenCalledWith({ access_token: "access", refresh_token: "refresh" });
+    expect(mocks.rpc).toHaveBeenCalledWith("has_app_access", { app_key: "myhabits" });
     expect(await response.json()).toEqual({ ok: true, confirmationRequired: false });
   });
 
@@ -44,6 +51,15 @@ describe("MyHabits UseAuth integration", () => {
     mocks.auth.setSession.mockResolvedValue({ data: { user: { id: "user-2" } }, error: null });
     const response = await request("sign-in");
     expect(response.status).toBe(503);
+    expect(mocks.auth.signOut).toHaveBeenCalledWith({ scope: "local" });
+  });
+
+  it("refuses an account without active MyHabits membership", async () => {
+    mocks.requestUseAuth.mockResolvedValue({ status: 200, data: { user: { id: "user-1" }, session: { access_token: "access", refresh_token: "refresh" } } });
+    mocks.auth.setSession.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+    mocks.rpc.mockResolvedValue({ data: false, error: null });
+    const response = await request("sign-in");
+    expect(response.status).toBe(403);
     expect(mocks.auth.signOut).toHaveBeenCalledWith({ scope: "local" });
   });
 
