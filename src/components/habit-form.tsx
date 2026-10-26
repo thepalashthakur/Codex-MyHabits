@@ -2,6 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Button from "@mui/material/Button";
+import Autocomplete from "@mui/material/Autocomplete";
 import TextField from "@mui/material/TextField";
 import MenuItem from "@mui/material/MenuItem";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -26,22 +27,37 @@ const presetUnits = [
   { value: "g", label: "Grams (g)" }, { value: "kg", label: "Kilograms (kg)" },
   { value: "calories", label: "Calories" },
 ];
-const customUnitChoice = "__custom__";
+const customUnitPrefix = "__custom__:";
+const presetUnitValues = presetUnits.map(unit => unit.value);
+
+function unitLabel(value: string) {
+  if (value.startsWith(customUnitPrefix)) return value.slice(customUnitPrefix.length);
+  return presetUnits.find(unit => unit.value === value)?.label ?? value;
+}
+
+function filterUnits(options: string[], inputValue: string) {
+  const query = inputValue.trim();
+  if (!query) return options;
+  const matches = options.filter(value => {
+    const unit = presetUnits.find(item => item.value === value);
+    return unit && `${unit.label} ${unit.value}`.toLocaleLowerCase().includes(query.toLocaleLowerCase());
+  });
+  return matches.length ? matches : [`${customUnitPrefix}${query}`];
+}
 
 export function HabitForm({ areas, today, habit, template }: { areas: Area[]; today: string; habit?: Habit; template?: Template }) {
   const router = useRouter(); const [schedule, setSchedule] = useState<ScheduleType>(habit?.schedule_type ?? "DAILY"); const [tracking, setTracking] = useState(habit?.tracking_type ?? template?.tracking_type ?? "BOOLEAN"); const [error, setError] = useState(""); const [pending, setPending] = useState(false);
   const initialUnit = habit?.unit ?? template?.unit ?? "";
-  const isPresetUnit = presetUnits.some(unit => unit.value === initialUnit);
-  const [unitChoice, setUnitChoice] = useState(() => isPresetUnit ? initialUnit : initialUnit ? customUnitChoice : "");
-  const [customUnit, setCustomUnit] = useState(() => initialUnit && !isPresetUnit ? initialUnit : "");
+  const [unitValue, setUnitValue] = useState<string | null>(initialUnit || null);
+  const [unitInput, setUnitInput] = useState(initialUnit ? unitLabel(initialUnit) : "");
   async function submit(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault(); setPending(true); setError(""); const form = new FormData(event.currentTarget);
     const weekdays = [0,1,2,3,4,5,6].filter(day => form.get(`weekday-${day}`) === "on");
     const schedule_config = schedule === "WEEKDAYS" ? { weekdays } : schedule === "INTERVAL" ? { interval: Number(form.get("interval")) } : schedule === "WEEKLY_TARGET" || schedule === "MONTHLY_TARGET" ? { target: Number(form.get("target")) } : {};
     const optionalNumber = (name: string) => form.get(name) ? Number(form.get(name)) : null;
     const quickIncrements = String(form.get("quick_increments") ?? "").split(",").map(value => value.trim()).filter(Boolean).map(Number);
-    const unit = tracking === "MEASURABLE" ? unitChoice === customUnitChoice ? customUnit.trim() : unitChoice : null;
-    if (tracking === "MEASURABLE" && !unit) { setError("Choose a unit or enter a custom unit."); setPending(false); return; }
+    const unit = tracking === "MEASURABLE" ? unitValue?.trim() || null : null;
+    if (tracking === "MEASURABLE" && !unit) { setError("Choose a unit from the suggestions, or choose the custom option."); setPending(false); return; }
     const body = { name: form.get("name"), description: form.get("description") || null, area_id: form.get("area_id") || null, type: form.get("type"), tracking_type: tracking, goal_value: tracking === "MEASURABLE" ? Number(form.get("goal_value")) : null, minimum_goal_value: tracking === "MEASURABLE" ? optionalNumber("minimum_goal_value") : null, stretch_goal_value: tracking === "MEASURABLE" ? optionalNumber("stretch_goal_value") : null, quick_increments: tracking === "MEASURABLE" && quickIncrements.length ? quickIncrements : null, unit, schedule_type: schedule, schedule_config, start_date: form.get("start_date"), end_date: form.get("end_date") || null, time_of_day: form.get("time_of_day"), priority: form.get("priority"), difficulty: form.get("difficulty") || null, icon: form.get("icon") || null, color: form.get("color") || null };
     try { const response = await fetch(habit ? `/api/v1/habits/${habit.id}` : "/api/v1/habits", { method: habit ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const data = await response.json(); if (!response.ok) throw Error(data.error); router.push(`/habits/${data.habit.id}`); router.refresh(); } catch (e) { setError(e instanceof Error ? e.message : "Unable to save habit."); } finally { setPending(false); }
   }
@@ -52,7 +68,7 @@ export function HabitForm({ areas, today, habit, template }: { areas: Area[]; to
         <TextField select label="Habit type" id="type" name="type" defaultValue={habit?.type ?? template?.type ?? "GOOD"}><MenuItem value="GOOD">Build a good habit</MenuItem><MenuItem value="BAD">Reduce a bad habit</MenuItem></TextField>
         <TextField select label="Tracking" id="tracking" name="tracking" value={tracking} onChange={e => setTracking(e.target.value as Habit["tracking_type"])}><MenuItem value="BOOLEAN">Yes or no</MenuItem><MenuItem value="MEASURABLE">Measured amount</MenuItem></TextField>
       </div>
-      {tracking === "MEASURABLE" && <><div className="form-grid"><TextField label="Target amount" id="goal_value" name="goal_value" type="number" slotProps={{ htmlInput: { min: 0.001, step: "any" } }} defaultValue={habit?.goal_value ?? template?.goal_value ?? ""} required/><TextField select label="Unit" id="unit_choice" name="unit_choice" value={unitChoice} onChange={event => setUnitChoice(event.target.value)} required><MenuItem value="" disabled>Choose a unit</MenuItem>{presetUnits.map(unit => <MenuItem key={unit.value} value={unit.value}>{unit.label}</MenuItem>)}<MenuItem value={customUnitChoice}>Custom unit…</MenuItem></TextField></div>{unitChoice === customUnitChoice && <TextField label="Custom unit" id="custom_unit" value={customUnit} onChange={event => setCustomUnit(event.target.value)} placeholder="e.g. chapters" slotProps={{ htmlInput: { maxLength: 40 } }} required/>}</>}
+      {tracking === "MEASURABLE" && <div className="form-grid"><TextField label="Target amount" id="goal_value" name="goal_value" type="number" slotProps={{ htmlInput: { min: 0.001, step: "any" } }} defaultValue={habit?.goal_value ?? template?.goal_value ?? ""} required/><Autocomplete freeSolo autoHighlight openOnFocus options={presetUnitValues} value={unitValue} inputValue={unitInput} onChange={(_, value) => { const selected = value?.startsWith(customUnitPrefix) ? value.slice(customUnitPrefix.length) : value; setUnitValue(selected); setUnitInput(selected ? unitLabel(selected) : ""); }} onInputChange={(_, value, reason) => { setUnitInput(value); if (reason === "input") setUnitValue(null); }} filterOptions={(options, state) => filterUnits(options, state.inputValue)} getOptionLabel={unitLabel} renderOption={(props, option) => <li {...props} key={option}>{option.startsWith(customUnitPrefix) ? `Use “${unitLabel(option)}” as a custom unit` : unitLabel(option)}</li>} renderInput={params => <TextField {...params} label="Unit" placeholder="Search units or type your own" slotProps={{ ...params.slotProps, htmlInput: { ...params.slotProps.htmlInput, maxLength: 40 } }} required/>}/></div>}
       <div className="form-grid">
         <TextField select label="Schedule" id="schedule" value={schedule} onChange={e => setSchedule(e.target.value as ScheduleType)}><MenuItem value="DAILY">Every day</MenuItem><MenuItem value="WEEKDAYS">Specific weekdays</MenuItem><MenuItem value="WEEKLY_TARGET">Times per week</MenuItem><MenuItem value="MONTHLY_TARGET">Times per month</MenuItem><MenuItem value="INTERVAL">Every N days</MenuItem></TextField>
         <TextField select label="Time of day" id="time_of_day" name="time_of_day" defaultValue={habit?.time_of_day ?? template?.time_of_day ?? "ANYTIME"}><MenuItem value="ANYTIME">Anytime</MenuItem><MenuItem value="MORNING">Morning</MenuItem><MenuItem value="AFTERNOON">Afternoon</MenuItem><MenuItem value="EVENING">Evening</MenuItem></TextField>
