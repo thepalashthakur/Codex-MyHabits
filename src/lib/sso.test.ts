@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { afterEach, expect, test, vi } from "vitest";
-import { challenge, parseSession, refreshSession, sameSecret, seal, ssoConfig, type SsoSession } from "./sso";
+import { challenge, parseSession, refreshSession, sameSecret, seal, ssoConfig, validateAccess, type SsoSession } from "./sso";
 
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
@@ -61,4 +61,13 @@ test("refresh rotates the token and validates the new access token", async () =>
   expect(refreshed).toMatchObject({ accessToken, refreshToken: "rotated-refresh", subject: "user-id" });
   expect(refreshed.expiresAt).toBeGreaterThan(now + 3599000);
   expect(fetchMock).toHaveBeenCalledTimes(2);
+  await expect(validateAccess(accessToken, "another-user")).rejects.toThrow("Invalid SSO access token");
+  const otherClientToken = await new SignJWT({ client_id: "other-client" })
+    .setProtectedHeader({ alg: "ES256", kid: jwk.kid })
+    .setIssuer(config.issuer)
+    .setAudience("authenticated")
+    .setSubject("user-id")
+    .setExpirationTime("1h")
+    .sign(privateKey);
+  await expect(validateAccess(otherClientToken, "user-id")).rejects.toThrow("Invalid SSO access token");
 });
