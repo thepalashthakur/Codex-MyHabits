@@ -37,7 +37,8 @@ export function isUseAuthConfigured() {
 
 export async function hasMyHabitsAccess(client: SupabaseClient) {
   const { data, error } = await client.rpc("has_app_access", { app_key: "myhabits" });
-  return !error && data === true;
+  if (error) throw new Error("Unable to check MyHabits access. Please retry.");
+  return data === true;
 }
 
 export async function requestUseAuth(action: "sign-in" | "sign-up", body: { email: string; password: string }): Promise<{ status: number; data: UseAuthResponse }>;
