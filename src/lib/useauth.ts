@@ -37,12 +37,13 @@ export function isUseAuthConfigured() {
 
 export async function hasMyHabitsAccess(client: SupabaseClient) {
   const { data, error } = await client.rpc("has_app_access", { app_key: "myhabits" });
-  return !error && data === true;
+  if (error) throw new Error("Unable to check MyHabits access. Please retry.");
+  return data === true;
 }
 
-export async function requestUseAuth(action: "sign-in" | "sign-up", body: { email: string; password: string }): Promise<{ status: number; data: UseAuthResponse }>;
-export async function requestUseAuth(action: "resend-confirmation", body: { email: string }): Promise<{ status: number; data: UseAuthResponse }>;
-export async function requestUseAuth(action: "sign-in" | "sign-up" | "resend-confirmation", body: { email: string; password?: string }) {
+export async function requestUseAuth(action: "sign-in" | "sign-up", body: { email: string; password: string; app_id?: string }): Promise<{ status: number; data: UseAuthResponse }>;
+export async function requestUseAuth(action: "resend-confirmation", body: { email: string; app_id?: string }): Promise<{ status: number; data: UseAuthResponse }>;
+export async function requestUseAuth(action: "sign-in" | "sign-up" | "resend-confirmation", body: { email: string; password?: string; app_id?: string }) {
   const response = await fetch(`${getUseAuthOrigin()}/api/v1/auth/${action}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

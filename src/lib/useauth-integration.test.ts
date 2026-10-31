@@ -68,6 +68,7 @@ describe("MyHabits UseAuth integration", () => {
     const response = await request("sign-up");
     expect(response.status).toBe(201);
     expect((await response.json()).confirmationRequired).toBe(true);
+    expect(mocks.requestUseAuth).toHaveBeenCalledWith("sign-up", { email: "test@example.com", password: "long-password", app_id: "myhabits" });
     expect(mocks.auth.setSession).not.toHaveBeenCalled();
   });
 
@@ -75,7 +76,7 @@ describe("MyHabits UseAuth integration", () => {
     mocks.requestUseAuth.mockResolvedValue({ status: 200, data: { message: "If this address needs confirmation, a new link will arrive shortly." } });
     const response = await request("resend-confirmation");
     expect(response.status).toBe(200);
-    expect(mocks.requestUseAuth).toHaveBeenCalledWith("resend-confirmation", { email: "test@example.com" });
+    expect(mocks.requestUseAuth).toHaveBeenCalledWith("resend-confirmation", { email: "test@example.com", app_id: "myhabits" });
     expect(mocks.auth.setSession).not.toHaveBeenCalled();
   });
 
