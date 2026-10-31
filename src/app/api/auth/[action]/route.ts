@@ -7,6 +7,8 @@ export const dynamic = "force-dynamic";
 const credentials = z.object({ email: z.email().max(254), password: z.string().min(1).max(128) });
 const emailOnly = credentials.pick({ email: true });
 type Context = { params: Promise<{ action: string }> };
+const appId = process.env.VERCEL_ENV === "preview" && process.env.VERCEL_GIT_COMMIT_REF === "feat/sso-pilot"
+  ? "myhabits_sso_preview" : "myhabits";
 export async function POST(request: Request, { params }: Context) {
   const action = (await params).action;
   if (!["sign-in", "sign-up", "sign-out", "resend-confirmation"].includes(action)) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -20,7 +22,7 @@ export async function POST(request: Request, { params }: Context) {
     const parsed = emailOnly.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
     try {
-      const result = await requestUseAuth("resend-confirmation", parsed.data);
+      const result = await requestUseAuth("resend-confirmation", { ...parsed.data, app_id: appId });
       if (result.status === 429) return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
       if (result.status < 200 || result.status >= 300) return NextResponse.json({ error: "Unable to resend confirmation right now." }, { status: 502 });
       return NextResponse.json({ message: result.data.message ?? "If this address needs confirmation, a new link will arrive shortly." });
@@ -31,7 +33,7 @@ export async function POST(request: Request, { params }: Context) {
   if (!parsed.success || (action === "sign-up" && parsed.data.password.length < 8)) return NextResponse.json({ error: "Enter a valid email and password (at least 8 characters to sign up)." }, { status: 400 });
   const { email, password } = parsed.data;
   try {
-    const result = await requestUseAuth(action === "sign-up" ? "sign-up" : "sign-in", { email, password });
+    const result = await requestUseAuth(action === "sign-up" ? "sign-up" : "sign-in", action === "sign-up" ? { email, password, app_id: appId } : { email, password });
     if (result.status < 200 || result.status >= 300) {
       const message = result.status === 429 ? "Too many attempts. Please try again later." : action === "sign-in" ? "Check your credentials and confirm your email." : "Unable to create account.";
       return NextResponse.json({ error: message }, { status: result.status === 429 ? 429 : action === "sign-in" ? 401 : 400 });
